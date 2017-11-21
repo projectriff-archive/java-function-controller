@@ -1,0 +1,13 @@
+= Function Controller
+
+Build:
+
+----
+./mvnw clean package
+----
+
+Create Docker Image:
+
+----
+./mvnw dockerfile:build -pl function-controller
+----
