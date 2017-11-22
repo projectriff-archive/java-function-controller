@@ -16,7 +16,7 @@
 
 package io.sk8s.test;
 
-import io.sk8s.kubernetes.client.Sk8sClient;
+import io.projectriff.kubernetes.client.RiffClient;
 
 /**
  * @author David Turanski
@@ -30,8 +30,8 @@ public class Sk8sTypesAvailableRule extends KubernetesAvailableRule {
 	@Override
 	protected void obtainResource() throws Exception {
 		try {
-			this.client.adapt(Sk8sClient.class).functions().list();
-			this.client.adapt(Sk8sClient.class).topics().list();
+			this.client.adapt(RiffClient.class).functions().list();
+			this.client.adapt(RiffClient.class).topics().list();
 		}
 		catch (Exception e) {
 			throw new RuntimeException("sk8s types are not available.");

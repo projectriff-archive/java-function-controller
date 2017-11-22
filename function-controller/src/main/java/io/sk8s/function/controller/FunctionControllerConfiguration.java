@@ -34,7 +34,7 @@ import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 
 import io.sk8s.core.resource.ResourceEventPublisher;
-import io.sk8s.kubernetes.client.Sk8sClient;
+import io.projectriff.kubernetes.client.RiffClient;
 
 /**
  * @author Mark Fisher
@@ -50,7 +50,7 @@ public class FunctionControllerConfiguration {
 	}
 
 	@Bean
-	public ResourceEventPublisher functionEventPublisher(Sk8sClient client) {
+	public ResourceEventPublisher functionEventPublisher(RiffClient client) {
 		return new ResourceEventPublisher(client.functions());
 	}
 
@@ -60,7 +60,7 @@ public class FunctionControllerConfiguration {
 	}
 
 	@Bean
-	public ResourceEventPublisher topicEventPublisher(Sk8sClient client) {
+	public ResourceEventPublisher topicEventPublisher(RiffClient client) {
 		return new ResourceEventPublisher(client.topics());
 	}
 
@@ -70,8 +70,8 @@ public class FunctionControllerConfiguration {
 	}
 
 	@Bean
-	public Sk8sClient sk8sClient(KubernetesClient kubernetesClient) {
-		return kubernetesClient.adapt(Sk8sClient.class);
+	public RiffClient sk8sClient(KubernetesClient kubernetesClient) {
+		return kubernetesClient.adapt(RiffClient.class);
 	}
 
 	@Bean

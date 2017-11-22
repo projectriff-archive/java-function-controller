@@ -33,7 +33,7 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.sk8s.kubernetes.api.model.XFunction;
+import io.projectriff.kubernetes.api.model.XFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
