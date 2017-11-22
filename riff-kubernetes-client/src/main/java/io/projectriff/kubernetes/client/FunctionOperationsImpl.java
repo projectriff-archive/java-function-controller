@@ -22,9 +22,11 @@ import java.util.TreeMap;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.base.HasMetadataOperation;
+
 import io.projectriff.kubernetes.api.model.DoneableXFunction;
 import io.projectriff.kubernetes.api.model.FunctionList;
 import io.projectriff.kubernetes.api.model.XFunction;
+
 import okhttp3.OkHttpClient;
 
 public class FunctionOperationsImpl

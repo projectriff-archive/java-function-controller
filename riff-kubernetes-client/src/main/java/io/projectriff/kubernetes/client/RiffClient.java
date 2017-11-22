@@ -19,6 +19,7 @@ package io.projectriff.kubernetes.client;
 import io.fabric8.kubernetes.client.Client;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
+
 import io.projectriff.kubernetes.api.model.DoneableTopic;
 import io.projectriff.kubernetes.api.model.DoneableXFunction;
 import io.projectriff.kubernetes.api.model.FunctionList;

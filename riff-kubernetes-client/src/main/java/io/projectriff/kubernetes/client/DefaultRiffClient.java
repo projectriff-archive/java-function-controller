@@ -16,20 +16,19 @@
 
 package io.projectriff.kubernetes.client;
 
-import java.lang.reflect.Field;
-import java.util.Map;
-
 import io.fabric8.kubernetes.client.BaseClient;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.internal.KubernetesDeserializer;
+
 import io.projectriff.kubernetes.api.model.DoneableTopic;
 import io.projectriff.kubernetes.api.model.DoneableXFunction;
 import io.projectriff.kubernetes.api.model.FunctionList;
 import io.projectriff.kubernetes.api.model.Topic;
 import io.projectriff.kubernetes.api.model.TopicList;
 import io.projectriff.kubernetes.api.model.XFunction;
+
 import okhttp3.OkHttpClient;
 
 public class DefaultRiffClient extends BaseClient implements RiffClient {
