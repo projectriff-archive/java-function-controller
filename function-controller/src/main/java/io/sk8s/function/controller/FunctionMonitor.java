@@ -36,9 +36,9 @@ import io.fabric8.kubernetes.api.model.extensions.Deployment;
 
 import io.sk8s.core.resource.ResourceAddedOrModifiedEvent;
 import io.sk8s.core.resource.ResourceDeletedEvent;
-import io.sk8s.kubernetes.api.model.Topic;
-import io.sk8s.kubernetes.api.model.TopicSpec;
-import io.sk8s.kubernetes.api.model.XFunction;
+import io.projectriff.kubernetes.api.model.Topic;
+import io.projectriff.kubernetes.api.model.TopicSpec;
+import io.projectriff.kubernetes.api.model.XFunction;
 
 /**
  * Listens for function registration/un-registration and periodically scales deployment of

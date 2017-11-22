@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2017 the original author or authors.
  *
@@ -15,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.sk8s.kubernetes.client;
+package io.projectriff.kubernetes.client;
 
 import java.lang.reflect.Field;
 import java.util.Map;
@@ -25,35 +24,22 @@ import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.internal.KubernetesDeserializer;
-import io.sk8s.kubernetes.api.model.DoneableTopic;
-import io.sk8s.kubernetes.api.model.DoneableXFunction;
-import io.sk8s.kubernetes.api.model.FunctionList;
-import io.sk8s.kubernetes.api.model.Topic;
-import io.sk8s.kubernetes.api.model.TopicList;
-import io.sk8s.kubernetes.api.model.XFunction;
+import io.projectriff.kubernetes.api.model.DoneableTopic;
+import io.projectriff.kubernetes.api.model.DoneableXFunction;
+import io.projectriff.kubernetes.api.model.FunctionList;
+import io.projectriff.kubernetes.api.model.Topic;
+import io.projectriff.kubernetes.api.model.TopicList;
+import io.projectriff.kubernetes.api.model.XFunction;
 import okhttp3.OkHttpClient;
 
-public class DefaultSk8sClient extends BaseClient implements Sk8sClient {
+public class DefaultRiffClient extends BaseClient implements RiffClient {
 
 	static {
-		hackKubernetesDeserializer();
+		KubernetesDeserializer.registerCustomKind("Topic", Topic.class);
+		KubernetesDeserializer.registerCustomKind("Function", XFunction.class);
 	}
 
-	private static void hackKubernetesDeserializer() {
-		try {
-			Field mapField = KubernetesDeserializer.class.getDeclaredField("MAP");
-			mapField.setAccessible(true);
-			Map<String, Class<?>> map = (Map<String, Class<?>>) mapField.get(null);
-
-			map.put("Topic", Topic.class);
-			map.put("Function", XFunction.class);
-		}
-		catch (NoSuchFieldException | IllegalAccessException e) {
-			throw new RuntimeException(e);
-		}
-	}
-
-	public DefaultSk8sClient(OkHttpClient okHttpClient, Config configuration) {
+	public DefaultRiffClient(OkHttpClient okHttpClient, Config configuration) {
 		super(okHttpClient, configuration);
 	}
 

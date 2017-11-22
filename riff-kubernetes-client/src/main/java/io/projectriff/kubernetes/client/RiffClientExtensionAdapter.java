@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2017 the original author or authors.
  *
@@ -15,26 +14,26 @@
  * limitations under the License.
  */
 
-package io.sk8s.kubernetes.client;
+package io.projectriff.kubernetes.client;
 
 import io.fabric8.kubernetes.client.APIGroupExtensionAdapter;
 import io.fabric8.kubernetes.client.Client;
 import okhttp3.OkHttpClient;
 
-public class Sk8sClientExtensionAdapter extends APIGroupExtensionAdapter<Sk8sClient> {
+public class RiffClientExtensionAdapter extends APIGroupExtensionAdapter<RiffClient> {
 
 	@Override
 	protected String getAPIGroupName() {
-		return "extensions.sk8s.io";
+		return "projectriff.io";
 	}
 
 	@Override
-	protected Sk8sClient newInstance(Client client) {
-		return new DefaultSk8sClient(client.adapt(OkHttpClient.class), client.getConfiguration());
+	protected RiffClient newInstance(Client client) {
+		return new DefaultRiffClient(client.adapt(OkHttpClient.class), client.getConfiguration());
 	}
 
 	@Override
-	public Class<Sk8sClient> getExtensionType() {
-		return Sk8sClient.class;
+	public Class<RiffClient> getExtensionType() {
+		return RiffClient.class;
 	}
 }

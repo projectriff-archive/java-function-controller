@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2017 the original author or authors.
  *
@@ -15,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.sk8s.kubernetes.client;
+package io.projectriff.kubernetes.client;
 
 import java.util.Map;
 import java.util.TreeMap;
@@ -23,25 +22,25 @@ import java.util.TreeMap;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.base.HasMetadataOperation;
-import io.sk8s.kubernetes.api.model.DoneableXFunction;
-import io.sk8s.kubernetes.api.model.FunctionList;
-import io.sk8s.kubernetes.api.model.XFunction;
+import io.projectriff.kubernetes.api.model.DoneableXFunction;
+import io.projectriff.kubernetes.api.model.FunctionList;
+import io.projectriff.kubernetes.api.model.XFunction;
 import okhttp3.OkHttpClient;
 
 public class FunctionOperationsImpl
 		extends HasMetadataOperation<XFunction, FunctionList, DoneableXFunction, Resource<XFunction, DoneableXFunction>> {
 
 	public FunctionOperationsImpl(OkHttpClient client, Config config, String namespace) {
-		this(client, config, "v1", namespace, null, true, null, null, false, -1, new TreeMap<String, String>(),
-				new TreeMap<String, String>(), new TreeMap<String, String[]>(), new TreeMap<String, String[]>(),
-				new TreeMap<String, String>());
+		this(client, config, "v1", namespace, null, true, null, null, false, -1, new TreeMap<>(),
+				new TreeMap<>(), new TreeMap<>(), new TreeMap<>(),
+				new TreeMap<>());
 	}
 
 	public FunctionOperationsImpl(OkHttpClient client, Config config, String apiVersion, String namespace, String name,
 	                              Boolean cascading, XFunction item, String resourceVersion, Boolean reloadingFromServer, long gracePeriodSeconds,
 	                              Map<String, String> labels, Map<String, String> labelsNot, Map<String, String[]> labelsIn,
 	                              Map<String, String[]> labelsNotIn, Map<String, String> fields) {
-		super(client, config, "extensions.sk8s.io", apiVersion, "functions", namespace, name, cascading, item,
+		super(client, config, "projectriff.io", apiVersion, "functions", namespace, name, cascading, item,
 				resourceVersion, reloadingFromServer, gracePeriodSeconds, labels, labelsNot, labelsIn, labelsNotIn,
 				fields);
 	}

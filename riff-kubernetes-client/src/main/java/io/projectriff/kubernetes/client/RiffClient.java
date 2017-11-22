@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2017 the original author or authors.
  *
@@ -15,19 +14,19 @@
  * limitations under the License.
  */
 
-package io.sk8s.kubernetes.client;
+package io.projectriff.kubernetes.client;
 
 import io.fabric8.kubernetes.client.Client;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
-import io.sk8s.kubernetes.api.model.DoneableTopic;
-import io.sk8s.kubernetes.api.model.DoneableXFunction;
-import io.sk8s.kubernetes.api.model.FunctionList;
-import io.sk8s.kubernetes.api.model.Topic;
-import io.sk8s.kubernetes.api.model.TopicList;
-import io.sk8s.kubernetes.api.model.XFunction;
+import io.projectriff.kubernetes.api.model.DoneableTopic;
+import io.projectriff.kubernetes.api.model.DoneableXFunction;
+import io.projectriff.kubernetes.api.model.FunctionList;
+import io.projectriff.kubernetes.api.model.Topic;
+import io.projectriff.kubernetes.api.model.TopicList;
+import io.projectriff.kubernetes.api.model.XFunction;
 
-public interface Sk8sClient extends Client {
+public interface RiffClient extends Client {
 
 	MixedOperation<Topic, TopicList, DoneableTopic, Resource<Topic, DoneableTopic>> topics();
 
