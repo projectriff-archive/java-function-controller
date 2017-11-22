@@ -50,7 +50,7 @@ import org.springframework.util.StringUtils;
  */
 public class FunctionDeployer {
 
-	private final static String SIDECAR_IMAGE = "sk8s/function-sidecar";
+	private final static String SIDECAR_IMAGE = "projectriff/function-sidecar";
 
 	private final static Logger logger = LoggerFactory.getLogger(FunctionDeployer.class);
 
