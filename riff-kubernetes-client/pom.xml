@@ -27,7 +27,7 @@
 
 	<groupId>io.projectriff</groupId>
 	<artifactId>riff-kubernetes-client</artifactId>
-	<version>1.0.0.BUILD-SNAPSHOT</version>
+	<version>0.0.1-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
 	<properties>
@@ -56,18 +56,9 @@
 			</exclusions>
 		</dependency>
 		<dependency>
-			<groupId>io.sk8s</groupId>
+			<groupId>io.projectriff</groupId>
 			<artifactId>kubernetes-model</artifactId>
 			<version>1.1-SNAPSHOT</version>
 		</dependency>
 	</dependencies>
-	<dependencyManagement>
-		<dependencies>
-			<dependency>
-				<groupId>io.fabric8</groupId>
-				<artifactId>kubernetes-model</artifactId>
-				<version>1.1.sk8s-SNAPSHOT</version>
-			</dependency>
-		</dependencies>
-	</dependencyManagement>
 </project>
