@@ -70,7 +70,7 @@ public class FunctionControllerConfiguration {
 	}
 
 	@Bean
-	public RiffClient sk8sClient(KubernetesClient kubernetesClient) {
+	public RiffClient riffClient(KubernetesClient kubernetesClient) {
 		return kubernetesClient.adapt(RiffClient.class);
 	}
 
