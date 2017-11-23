@@ -16,8 +16,10 @@
 
 package io.projectriff.controller.function;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -132,7 +134,7 @@ public class FunctionDeployer {
 		ContainerBuilder builder = new ContainerBuilder().withName("sidecar")
 				.withImage(SIDECAR_IMAGE + ":" + sidecarProperties.getTag())
 				.withImagePullPolicy("IfNotPresent")
-				.withEnv(buildSidecarEnvVars(function));
+				.withArgs(buildSidecarArgs(function));
 		if ("stdio".equals(function.getSpec().getProtocol())) {
 			builder.withVolumeMounts(buildNamedPipesMount());
 		}
@@ -143,34 +145,17 @@ public class FunctionDeployer {
 		return new VolumeMountBuilder().withMountPath("/pipes").withName("pipes").build();
 	}
 
-	private EnvVar[] buildSidecarEnvVars(XFunction function) {
+	private List<String> buildSidecarArgs(XFunction function) {
 		String outputDestination = function.getSpec().getOutput();
 		if (!StringUtils.hasText(outputDestination)) {
 			outputDestination = "replies";
 		}
-		Map<String, Object> config = new LinkedHashMap<>();
-		config.put("spring.cloud.stream.bindings.input.destination", function.getSpec().getInput());
-		config.put("spring.cloud.stream.bindings.output.destination", outputDestination);
-		config.put("spring.cloud.stream.bindings.input.group", function.getMetadata().getName());
-		config.put("spring.profiles.active", function.getSpec().getProtocol());
-		config.put("spring.application.name", "sidecar-" + function.getSpec().getInput());
-
-		config.put("spring.cloud.stream.kafka.binder.brokers", System.getenv("SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS"));
-		config.put("spring.cloud.stream.kafka.binder.zkNodes", System.getenv("SPRING_CLOUD_STREAM_KAFKA_BINDER_ZK_NODES"));
-		config.put("server.port", "-1");
-
-		String json;
-		try {
-			json = objectMapper.writeValueAsString(config);
-		}
-		catch (JsonProcessingException e) {
-			throw new RuntimeException(e);
-		}
-
-		return new EnvVar[] {
-				new EnvVarBuilder().withName("JAVA_TOOL_OPTIONS").withValue("-Xmx512m").build(),
-				new EnvVarBuilder().withName("SPRING_APPLICATION_JSON").withValue(json).build()
-
-		};
+		return Arrays.asList(
+			"--inputs", function.getSpec().getInput(),
+			"--outputs", outputDestination,
+			"--group", 	function.getMetadata().getName(),
+			"--protocol", function.getSpec().getProtocol(),
+			"--brokers", System.getenv("SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS")
+		);
 	}
 }
