@@ -18,37 +18,31 @@ package io.projectriff.controller.function;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.util.StringUtils;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSourceBuilder;
-import io.fabric8.kubernetes.api.model.EnvVar;
-import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.PodSpecBuilder;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
-
 import io.projectriff.kubernetes.api.model.XFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 
 /**
  * Makes sure a certain function is running on Kubernetes.
  *
- * <p>This implementation uses k8s deployments with a desired replicas count (possibly 0).</p>
+ * <p>
+ * This implementation uses k8s deployments with a desired replicas count (possibly 0).
+ * </p>
  *
  * @author Eric Bottard
  * @author Mark Fisher
@@ -151,11 +145,10 @@ public class FunctionDeployer {
 			outputDestination = "replies";
 		}
 		return Arrays.asList(
-			"--inputs", function.getSpec().getInput(),
-			"--outputs", outputDestination,
-			"--group", 	function.getMetadata().getName(),
-			"--protocol", function.getSpec().getProtocol(),
-			"--brokers", System.getenv("SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS")
-		);
+				"--inputs", function.getSpec().getInput(),
+				"--outputs", outputDestination,
+				"--group", function.getMetadata().getName(),
+				"--protocol", function.getSpec().getProtocol(),
+				"--brokers", System.getenv("SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS"));
 	}
 }
