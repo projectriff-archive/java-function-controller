@@ -24,7 +24,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "riff.function.sidecar")
 public class SidecarProperties {
 
-	private String tag = "0.0.1";
+	private String tag = "0.0.2-snapshot";
 
 	public String getTag() {
 		return tag;
