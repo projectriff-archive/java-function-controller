@@ -57,6 +57,8 @@ public class FunctionDeployer {
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
+	private static final List<String> NEEDS_VOLUME = Arrays.asList("stdio", "pipes");
+
 	@Autowired
 	private SidecarProperties sidecarProperties;
 
@@ -106,7 +108,7 @@ public class FunctionDeployer {
 	private PodSpec buildPodSpec(XFunction function) {
 		PodSpecBuilder builder = new PodSpecBuilder()
 				.withContainers(buildMainContainer(function), buildSidecarContainer(function));
-		if ("stdio".equals(function.getSpec().getProtocol())) {
+		if (NEEDS_VOLUME.contains(function.getSpec().getProtocol())) {
 			builder.withVolumes(new VolumeBuilder()
 					.withName("pipes")
 					.withEmptyDir(new EmptyDirVolumeSourceBuilder().build())
@@ -118,7 +120,7 @@ public class FunctionDeployer {
 	private Container buildMainContainer(XFunction function) {
 		ContainerBuilder builder = new ContainerBuilder(function.getSpec().getContainer())
 				.withName("main");
-		if ("stdio".equals(function.getSpec().getProtocol())) {
+		if (NEEDS_VOLUME.contains(function.getSpec().getProtocol())) {
 			builder.withVolumeMounts(buildNamedPipesMount());
 		}
 		return builder.build();
@@ -129,7 +131,7 @@ public class FunctionDeployer {
 				.withImage(SIDECAR_IMAGE + ":" + sidecarProperties.getTag())
 				.withImagePullPolicy("IfNotPresent")
 				.withArgs(buildSidecarArgs(function));
-		if ("stdio".equals(function.getSpec().getProtocol())) {
+		if (NEEDS_VOLUME.contains(function.getSpec().getProtocol())) {
 			builder.withVolumeMounts(buildNamedPipesMount());
 		}
 		return builder.build();

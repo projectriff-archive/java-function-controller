@@ -176,46 +176,12 @@ public class FunctionMonitor {
 		public void run() {
 			while (running.get()) {
 				synchronized (FunctionMonitor.this) {
-					Map<LagTracker.Subscription, List<LagTracker.Offsets>> offsets = lagTracker.compute();
-					logOffsets(offsets);
-					Map<String, Long> lags = offsets.entrySet().stream()
-							.collect(Collectors.toMap(
-									e -> e.getKey().group,
-									e -> e.getValue().stream()
-											.mapToLong(LagTracker.Offsets::getLag)
-											.max().getAsLong()));
-					functions.values().stream().forEach(
-							f -> {
-								int desired = computeDesiredReplicaCount(lags, f);
-								String name = f.getMetadata().getName();
-								Integer current = actualReplicaCount.computeIfAbsent(name, k -> 0);
-								logger.debug("Want {} for {} (Deployment currently set to {})", desired, name, current);
-								Integer idleTimeout = f.getSpec().getIdleTimeoutMs();
-								if (idleTimeout == null) {
-									idleTimeout = DEFAULT_IDLE_TIMEOUT;
-								}
-								long now = System.currentTimeMillis();
-								boolean resetScaleDownStartTime = true;
-								if (desired < current) {
-									if (scaleDownStartTimes.computeIfAbsent(name, n -> now) < now - idleTimeout) {
-										deployer.deploy(f, desired);
-										actualReplicaCount.put(name, desired);
-									}
-									else {
-										resetScaleDownStartTime = false;
-										logger.trace("Waiting another {}ms before scaling down to {} for {}",
-												idleTimeout - (now - scaleDownStartTimes.get(name)),
-												desired, name);
-									}
-								}
-								else if (desired > current) {
-									deployer.deploy(f, desired);
-									actualReplicaCount.put(name, desired);
-								}
-								if (resetScaleDownStartTime) {
-									scaleDownStartTimes.remove(name);
-								}
-							});
+					try {
+						scaleFunctions();
+					}
+					catch (RuntimeException e) {
+						logger.warn("Caught exception in loop, continuing...", e);
+					}
 					try {
 						FunctionMonitor.this.wait(scalerIntervalMs);
 					}
@@ -224,6 +190,49 @@ public class FunctionMonitor {
 					}
 				}
 			}
+		}
+
+		private void scaleFunctions() {
+			Map<LagTracker.Subscription, List<LagTracker.Offsets>> offsets = lagTracker.compute();
+			logOffsets(offsets);
+			Map<String, Long> lags = offsets.entrySet().stream()
+					.collect(Collectors.toMap(
+							e -> e.getKey().group,
+							e -> e.getValue().stream()
+									.mapToLong(LagTracker.Offsets::getLag)
+									.max().getAsLong()));
+			functions.values().stream().forEach(
+					f -> {
+						int desired = computeDesiredReplicaCount(lags, f);
+						String name = f.getMetadata().getName();
+						Integer current = actualReplicaCount.computeIfAbsent(name, k -> 0);
+						logger.debug("Want {} for {} (Deployment currently set to {})", desired, name, current);
+						Integer idleTimeout = f.getSpec().getIdleTimeoutMs();
+						if (idleTimeout == null) {
+							idleTimeout = DEFAULT_IDLE_TIMEOUT;
+						}
+						long now = System.currentTimeMillis();
+						boolean resetScaleDownStartTime = true;
+						if (desired < current) {
+							if (scaleDownStartTimes.computeIfAbsent(name, n -> now) < now - idleTimeout) {
+								deployer.deploy(f, desired);
+								actualReplicaCount.put(name, desired);
+							}
+							else {
+								resetScaleDownStartTime = false;
+								logger.trace("Waiting another {}ms before scaling down to {} for {}",
+										idleTimeout - (now - scaleDownStartTimes.get(name)),
+										desired, name);
+							}
+						}
+						else if (desired > current) {
+							deployer.deploy(f, desired);
+							actualReplicaCount.put(name, desired);
+						}
+						if (resetScaleDownStartTime) {
+							scaleDownStartTimes.remove(name);
+						}
+					});
 		}
 
 		/**
