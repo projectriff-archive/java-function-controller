@@ -172,6 +172,10 @@ public class LagTracker implements Closeable {
 			return endOffset - currentOffset;
 		}
 
+		long getEnd() {
+			return endOffset;
+		}
+
 		@Override
 		public String toString() {
 			return "Offsets{" +

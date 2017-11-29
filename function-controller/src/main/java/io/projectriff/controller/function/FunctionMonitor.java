@@ -65,10 +65,19 @@ public class FunctionMonitor {
 	/** Keeps track of what the deployments ask. */
 	private final Map<String, Integer> actualReplicaCount = new ConcurrentHashMap<>();
 
+	/** Keeps track of how many deployment replicas are marked 'available' */
 	private final Map<String, Integer> availableReplicaCount = new ConcurrentHashMap<>();
+
+	private final Map<String, Float> smoothedReplicaCount = new ConcurrentHashMap<>();
 
 	/** Keeps track of the last time this decided to scale down (but not yet effective). */
 	private final Map<String, Long> scaleDownStartTimes = new ConcurrentHashMap<>();
+
+	/**
+	 * Keeps track of the sum of end positions for all partitions of a scaling-to-0 function's
+	 * input topic
+	 */
+	private final Map<String, Long> scaleDownPositionSums = new ConcurrentHashMap<>();
 
 	@Autowired
 	private FunctionDeployer deployer;
@@ -136,10 +145,14 @@ public class FunctionMonitor {
 			String functionName = deployment.getMetadata().getName();
 			Integer replicas = deployment.getStatus().getReplicas();
 			replicas = (replicas != null) ? replicas : 0;
+			Integer previous = this.actualReplicaCount.put(functionName, replicas);
+			if (previous != replicas) {
+				this.smoothedReplicaCount.put(functionName, (float) replicas);
+			}
+
 			Integer availableReplicas = deployment.getStatus().getAvailableReplicas();
 			availableReplicas = (availableReplicas != null) ? availableReplicas : 0;
-			this.actualReplicaCount.put(functionName, replicas);
-			Integer previous = this.availableReplicaCount.put(functionName, availableReplicas);
+			previous = this.availableReplicaCount.put(functionName, availableReplicas);
 			if (previous != availableReplicas) {
 				XFunction functionResource = this.functions.get(functionName);
 				if (functionResource != null && !FUNCTION_REPLICA_TOPIC.equals(functionResource.getSpec().getInput())) {
@@ -156,6 +169,8 @@ public class FunctionMonitor {
 		if (deployment.getMetadata().getLabels().containsKey("function")) {
 			String functionName = deployment.getMetadata().getName();
 			this.actualReplicaCount.remove(functionName);
+			this.smoothedReplicaCount.remove(functionName);
+			this.availableReplicaCount.remove(functionName);
 		}
 	}
 
@@ -201,48 +216,87 @@ public class FunctionMonitor {
 							e -> e.getValue().stream()
 									.mapToLong(LagTracker.Offsets::getLag)
 									.max().getAsLong()));
+			Map<String, Long> positionSums = offsets.entrySet().stream()
+					.collect(Collectors.toMap(
+							e -> e.getKey().group,
+							e -> e.getValue().stream()
+									.mapToLong(LagTracker.Offsets::getEnd).sum()));
 			functions.values().stream().forEach(
 					f -> {
-						int desired = computeDesiredReplicaCount(lags, f);
 						String name = f.getMetadata().getName();
-						Integer current = actualReplicaCount.computeIfAbsent(name, k -> 0);
-						logger.debug("Want {} for {} (Deployment currently set to {})", desired, name, current);
 						Integer idleTimeout = f.getSpec().getIdleTimeoutMs();
 						if (idleTimeout == null) {
 							idleTimeout = DEFAULT_IDLE_TIMEOUT;
 						}
-						long now = System.currentTimeMillis();
-						boolean resetScaleDownStartTime = true;
-						if (desired < current) {
-							if (scaleDownStartTimes.computeIfAbsent(name, n -> now) < now - idleTimeout) {
-								deployer.deploy(f, desired);
-								actualReplicaCount.put(name, desired);
+
+						long currentPositionSum = positionSums.get(name);
+						int desired = computeDesiredReplicaCount(lags, f);
+						int current = actualReplicaCount.computeIfAbsent(name, k -> 0);
+
+						if (desired != current) {
+							float interpolation = smoothedReplicaCount.computeIfAbsent(name, k -> 0F);
+
+							interpolation = interpolate(interpolation, desired, .05f);
+							int rounded = Math.round(interpolation);
+							smoothedReplicaCount.put(name, interpolation);
+
+							logger.debug(
+									"Want {} for {}. Rounded to {} [target = {}]. (Deployment currently set to {})",
+									interpolation, name, rounded, desired, current);
+							if (current == 0 && desired > 0) {
+								// Special case when scaling from 0
+								deployer.deploy(f, 1);
+							}
+							else if (rounded != current) {
+								// Special case when going back to 0
+								if (rounded == 0) {
+									Long start = scaleDownStartTimes.get(name);
+									long now = System.currentTimeMillis();
+									if (start == null) {
+										scaleDownStartTimes.put(name, now);
+										scaleDownPositionSums.put(name, currentPositionSum);
+									}
+									else {
+										if (now >= start + idleTimeout) {
+											scaleDownStartTimes.remove(name);
+											deployer.deploy(f, rounded);
+										}
+										else {
+											if (currentPositionSum > scaleDownPositionSums.get(name)) {
+												// still active, reset the clock
+												scaleDownStartTimes.remove(name);
+												scaleDownPositionSums.remove(name);
+											}
+											else {
+												logger.debug("Waiting another {}ms to scale back down to 0 for {}",
+														start + idleTimeout - now, name);
+											}
+										}
+									}
+								}
+								else {
+									deployer.deploy(f, rounded);
+									scaleDownStartTimes.remove(name);
+								}
 							}
 							else {
-								resetScaleDownStartTime = false;
-								logger.trace("Waiting another {}ms before scaling down to {} for {}",
-										idleTimeout - (now - scaleDownStartTimes.get(name)),
-										desired, name);
+								scaleDownStartTimes.remove(name);
 							}
-						}
-						else if (desired > current) {
-							deployer.deploy(f, desired);
-							actualReplicaCount.put(name, desired);
-						}
-						if (resetScaleDownStartTime) {
-							scaleDownStartTimes.remove(name);
 						}
 					});
 		}
 
 		/**
-		 * Compute the desired replica count for a function. This function leverages these 4 values (currently non configurable):
+		 * Compute the desired replica count for a function. This function leverages these 4
+		 * values (currently non configurable):
 		 * <ul>
 		 * <li>minReplicas (>= 0, default 0)</li>
-		 * <li>maxReplicas (minReplicas <= maxReplicas <= partitionCount, default partitionCount)</li>
-		 * <li>lagRequiredForOne, the amount of lag required to trigger the first pod to appear, default 1</li>
-		 * <li>lagRequiredForMax, the amount of lag required to trigger all (maxReplicas) pods to appear. Default
-		 * 10.</li>
+		 * <li>maxReplicas (minReplicas <= maxReplicas <= partitionCount, default
+		 * partitionCount)</li>
+		 * <li>lagRequiredForOne, the amount of lag required to trigger the first pod to appear,
+		 * default 1</li>
+		 * <li>lagRequiredForMax, the amount of lag required to trigger all (maxReplicas) pods to
+		 * appear. Default 10.</li>
 		 * </ul>
 		 * This method linearly interpolates based on witnessed lag and clamps the result between
 		 * min/maxReplicas.
@@ -293,12 +347,20 @@ public class FunctionMonitor {
 		private void logOffsets(Map<LagTracker.Subscription, List<LagTracker.Offsets>> offsets) {
 			for (Map.Entry<LagTracker.Subscription, List<LagTracker.Offsets>> entry : offsets
 					.entrySet()) {
-				logger.debug(entry.getKey().toString());
+				logger.trace(entry.getKey().toString());
 				for (LagTracker.Offsets values : entry.getValue()) {
-					logger.debug("\t" + values + " Lag=" + values.getLag());
+					logger.trace("\t" + values + " Lag=" + values.getLag());
 				}
 			}
 		}
+	}
+
+	/**
+	 * Shoot for value {@literal target}, while currently at {@current}. 'greed' represents
+	 * how much of the missing piece we're going to grab in one 'tick'.
+	 */
+	private static float interpolate(float current, int target, float greed) {
+		return current + (target - current) * greed;
 	}
 
 	private static int clamp(int value, int min, int max) {
