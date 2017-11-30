@@ -235,7 +235,27 @@ public class FunctionMonitor {
 									"Want {} for {}. Rounded to {} [target = {}]. (Deployment currently set to {})",
 									interpolation, name, rounded, desired, current);
 							if (rounded != current) {
-								deployer.deploy(f, rounded);
+								// Special case when going back to 0
+								if (rounded == 0) {
+									Long start = scaleDownStartTimes.get(name);
+									long now = System.currentTimeMillis();
+									if (start == null) {
+										start = now;
+										scaleDownStartTimes.put(name, now);
+									} else {
+										if (now >= start + idleTimeout) {
+											scaleDownStartTimes.remove(name);
+											deployer.deploy(f, rounded);
+										} else {
+											logger.debug("Waiting another {}ms to scale back down to 0 for {}", start + idleTimeout - now, name);
+										}
+									}
+								} else {
+									deployer.deploy(f, rounded);
+									scaleDownStartTimes.remove(name);
+								}
+							} else {
+								scaleDownStartTimes.remove(name);
 							}
 						}
 					});
@@ -315,14 +335,14 @@ public class FunctionMonitor {
 		return current + (target - current) * greed;
 	}
 
-	public static void notmain(String[] args) {
-		float v = 3;
+	public static void main(String[] args) {
+		float v = 1;
 		int target = 0;
 
 		int i = 0;
 		int lastv = (int) v;
 		while (Math.round(v) != target) {
-			v = interpolate(v, target, .05f);
+			v = interpolate(v, target, .0001f);
 			if (Math.round(v) != lastv) {
 				v = lastv = Math.round(v);
 			}
