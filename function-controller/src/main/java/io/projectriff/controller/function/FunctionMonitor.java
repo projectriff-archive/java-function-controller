@@ -65,10 +65,15 @@ public class FunctionMonitor {
 	/** Keeps track of what the deployments ask. */
 	private final Map<String, Integer> actualReplicaCount = new ConcurrentHashMap<>();
 
+	/** Keeps track of how many deployment replicas are marked 'available' */
 	private final Map<String, Integer> availableReplicaCount = new ConcurrentHashMap<>();
+
+	private final Map<String, Float> smoothedReplicaCount = new ConcurrentHashMap<>();
 
 	/** Keeps track of the last time this decided to scale down (but not yet effective). */
 	private final Map<String, Long> scaleDownStartTimes = new ConcurrentHashMap<>();
+
+
 
 	@Autowired
 	private FunctionDeployer deployer;
@@ -136,10 +141,14 @@ public class FunctionMonitor {
 			String functionName = deployment.getMetadata().getName();
 			Integer replicas = deployment.getStatus().getReplicas();
 			replicas = (replicas != null) ? replicas : 0;
+			Integer previous = this.actualReplicaCount.put(functionName, replicas);
+			if (previous != replicas) {
+				this.smoothedReplicaCount.put(functionName, (float)replicas);
+			}
+
 			Integer availableReplicas = deployment.getStatus().getAvailableReplicas();
 			availableReplicas = (availableReplicas != null) ? availableReplicas : 0;
-			this.actualReplicaCount.put(functionName, replicas);
-			Integer previous = this.availableReplicaCount.put(functionName, availableReplicas);
+			previous = this.availableReplicaCount.put(functionName, availableReplicas);
 			if (previous != availableReplicas) {
 				XFunction functionResource = this.functions.get(functionName);
 				if (functionResource != null && !FUNCTION_REPLICA_TOPIC.equals(functionResource.getSpec().getInput())) {
@@ -156,6 +165,8 @@ public class FunctionMonitor {
 		if (deployment.getMetadata().getLabels().containsKey("function")) {
 			String functionName = deployment.getMetadata().getName();
 			this.actualReplicaCount.remove(functionName);
+			this.smoothedReplicaCount.remove(functionName);
+			this.availableReplicaCount.remove(functionName);
 		}
 	}
 
@@ -203,34 +214,49 @@ public class FunctionMonitor {
 									.max().getAsLong()));
 			functions.values().stream().forEach(
 					f -> {
-						int desired = computeDesiredReplicaCount(lags, f);
 						String name = f.getMetadata().getName();
-						Integer current = actualReplicaCount.computeIfAbsent(name, k -> 0);
-						logger.debug("Want {} for {} (Deployment currently set to {})", desired, name, current);
 						Integer idleTimeout = f.getSpec().getIdleTimeoutMs();
 						if (idleTimeout == null) {
 							idleTimeout = DEFAULT_IDLE_TIMEOUT;
 						}
-						long now = System.currentTimeMillis();
-						boolean resetScaleDownStartTime = true;
-						if (desired < current) {
-							if (scaleDownStartTimes.computeIfAbsent(name, n -> now) < now - idleTimeout) {
-								deployer.deploy(f, desired);
-								actualReplicaCount.put(name, desired);
+
+						int desired = computeDesiredReplicaCount(lags, f);
+						int current = actualReplicaCount.computeIfAbsent(name, k -> 0);
+
+						if (desired != current) {
+							float interpolation = smoothedReplicaCount.computeIfAbsent(name, k -> 0F);
+
+							// TODO: rename 'idleTimeout' and use that as (a way to influence) the 3rd argument
+							interpolation = interpolate(interpolation, desired, .05f);
+							int rounded = Math.round(interpolation);
+							smoothedReplicaCount.put(name, interpolation);
+
+							logger.debug(
+									"Want {} for {}. Rounded to {} [target = {}]. (Deployment currently set to {})",
+									interpolation, name, rounded, desired, current);
+							if (rounded != current) {
+								// Special case when going back to 0
+								if (rounded == 0) {
+									Long start = scaleDownStartTimes.get(name);
+									long now = System.currentTimeMillis();
+									if (start == null) {
+										start = now;
+										scaleDownStartTimes.put(name, now);
+									} else {
+										if (now >= start + idleTimeout) {
+											scaleDownStartTimes.remove(name);
+											deployer.deploy(f, rounded);
+										} else {
+											logger.debug("Waiting another {}ms to scale back down to 0 for {}", start + idleTimeout - now, name);
+										}
+									}
+								} else {
+									deployer.deploy(f, rounded);
+									scaleDownStartTimes.remove(name);
+								}
+							} else {
+								scaleDownStartTimes.remove(name);
 							}
-							else {
-								resetScaleDownStartTime = false;
-								logger.trace("Waiting another {}ms before scaling down to {} for {}",
-										idleTimeout - (now - scaleDownStartTimes.get(name)),
-										desired, name);
-							}
-						}
-						else if (desired > current) {
-							deployer.deploy(f, desired);
-							actualReplicaCount.put(name, desired);
-						}
-						if (resetScaleDownStartTime) {
-							scaleDownStartTimes.remove(name);
 						}
 					});
 		}
@@ -293,12 +319,39 @@ public class FunctionMonitor {
 		private void logOffsets(Map<LagTracker.Subscription, List<LagTracker.Offsets>> offsets) {
 			for (Map.Entry<LagTracker.Subscription, List<LagTracker.Offsets>> entry : offsets
 					.entrySet()) {
-				logger.debug(entry.getKey().toString());
+				logger.trace(entry.getKey().toString());
 				for (LagTracker.Offsets values : entry.getValue()) {
-					logger.debug("\t" + values + " Lag=" + values.getLag());
+					logger.trace("\t" + values + " Lag=" + values.getLag());
 				}
 			}
 		}
+	}
+
+	/**
+	 * Shoot for value {@literal target}, while currently at {@current}. 'greed' represents how much of the missing
+	 * piece we're going to grab in one 'tick'.
+	 */
+	private static float interpolate(float current, int target, float greed) {
+		return current + (target - current) * greed;
+	}
+
+	public static void main(String[] args) {
+		float v = 1;
+		int target = 0;
+
+		int i = 0;
+		int lastv = (int) v;
+		while (Math.round(v) != target) {
+			v = interpolate(v, target, .0001f);
+			if (Math.round(v) != lastv) {
+				v = lastv = Math.round(v);
+			}
+			System.out.format("%f %d%n", v, lastv);
+			i++;
+		}
+		System.out.println(" == " + i + " steps");
+
+
 	}
 
 	private static int clamp(int value, int min, int max) {
