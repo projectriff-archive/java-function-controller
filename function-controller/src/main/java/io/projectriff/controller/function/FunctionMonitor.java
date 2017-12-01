@@ -305,12 +305,15 @@ public class FunctionMonitor {
 			String fnName = f.getMetadata().getName();
 			long lag = lags.get(fnName);
 			String input = f.getSpec().getInput();
+			int partitionCount = partitionCount(input);
 
-			// TODO: those 4 numbers part of Function spec?
+			// TODO: those 3 numbers part of Function spec?
 			int lagRequiredForMax = 10;
 			int lagRequiredForOne = 1;
 			int minReplicas = 0;
-			int maxReplicas = partitionCount(input);
+			
+			int maxReplicas = f.getSpec().getMaxReplicas() != null ? f.getSpec().getMaxReplicas() : partitionCount;
+			maxReplicas = clamp(maxReplicas, minReplicas, partitionCount);
 
 			double slope = ((double) maxReplicas - 1) / (lagRequiredForMax - lagRequiredForOne);
 			int computedReplicas;
