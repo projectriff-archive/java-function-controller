@@ -26,7 +26,6 @@ import org.springframework.cloud.stream.binder.MessageValues;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.Message;
-import org.springframework.messaging.MessageHeaders;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -51,9 +50,9 @@ public class EventPublisher {
 		try {
 			byte[] payload = this.mapper.writeValueAsString(event).getBytes(StandardCharsets.UTF_8.name());
 			Message<byte[]> message = MessageBuilder.withPayload(payload)
-					.setHeader(MessageHeaders.CONTENT_TYPE, "text/plain")
+					.setHeader("Content-Type", "application/json")
 					.build();
-			byte[] bytes = EmbeddedHeaderUtils.embedHeaders(new MessageValues(message)); 
+			byte[] bytes = EmbeddedHeaderUtils.embedHeaders(new MessageValues(message), "Content-Type"); 
 			this.kafkaTemplate.send(topic, bytes);
 		}
 		catch (Exception e) {

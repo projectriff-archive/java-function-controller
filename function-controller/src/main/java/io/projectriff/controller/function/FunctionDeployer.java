@@ -20,7 +20,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
+
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSourceBuilder;
@@ -30,12 +35,8 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.projectriff.kubernetes.api.model.XFunction;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.util.StringUtils;
+import io.projectriff.kubernetes.api.model.XFunction;
 
 /**
  * Makes sure a certain function is running on Kubernetes.
@@ -54,8 +55,6 @@ public class FunctionDeployer {
 	private final static Logger logger = LoggerFactory.getLogger(FunctionDeployer.class);
 
 	private final KubernetesClient kubernetesClient;
-
-	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	private static final List<String> NEEDS_VOLUME = Arrays.asList("stdio", "pipes");
 
