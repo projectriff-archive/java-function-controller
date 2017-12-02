@@ -240,7 +240,7 @@ public class FunctionMonitor {
 							int rounded = Math.round(interpolation);
 							smoothedReplicaCount.put(name, interpolation);
 
-							logger.debug(
+							logger.trace(
 									"Want {} for {}. Rounded to {} [target = {}]. (Deployment currently set to {})",
 									interpolation, name, rounded, desired, current);
 							if (current == 0 && desired > 0) {
