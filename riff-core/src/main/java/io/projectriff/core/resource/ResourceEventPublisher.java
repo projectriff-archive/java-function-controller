@@ -93,6 +93,7 @@ public class ResourceEventPublisher<T extends HasMetadata, L extends KubernetesR
 				break;
 			case MODIFIED:
 				applicationEventPublisher.publishEvent(new ResourceModifiedEvent<>(resource));
+				break;
 			case ERROR:
 				applicationEventPublisher.publishEvent(new ResourceErrorEvent<>(resource));
 				break;
