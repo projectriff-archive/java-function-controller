@@ -35,6 +35,7 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 
 import io.projectriff.kubernetes.api.model.XFunction;
 
@@ -66,15 +67,17 @@ public class FunctionDeployer {
 	}
 
 	/**
-	 * Requests that the given function be deployed with N replicas.
+	 * Requests that the given function be deployed with 0 replicas.
 	 */
-	public void deploy(XFunction functionResource, int replicas) {
+	public void deploy(XFunction functionResource) {
 		String functionName = functionResource.getMetadata().getName();
-		logger.debug("Setting {} replicas for {}", replicas, functionName);
-		// @formatter:off
-		this.kubernetesClient.extensions().deployments()
+		int replicas = 0; // TODO: allow configuration of minReplicas for a function?
+		logger.debug("Deploying {} with {} replicas", functionName, replicas);
+		try {
+			// @formatter:off
+			this.kubernetesClient.extensions().deployments()
 				.inNamespace(functionResource.getMetadata().getNamespace())
-				.createOrReplaceWithNew()
+				.createNew()
 					.withApiVersion("extensions/v1beta1")
 					.withNewMetadata()
 						.withName(functionName)
@@ -90,7 +93,28 @@ public class FunctionDeployer {
 						.endTemplate()
 					.endSpec()
 				.done();
-		// @formatter:on
+			// @formatter:on
+		}
+		catch (KubernetesClientException e) {
+			if ("AlreadyExists".equals(e.getStatus().getReason())) {
+				logger.debug("Deployment for {} already exists.", functionName);
+			}
+			else {
+				throw e;
+			}
+		}
+	}
+
+	/**
+	 * Requests that the given function's deployment be scaled to N replicas.
+	 */
+	public void scale(XFunction functionResource, int replicas) {
+		String functionName = functionResource.getMetadata().getName();
+		logger.debug("Setting {} replicas for {}", replicas, functionName);
+		this.kubernetesClient.extensions().deployments()
+				.inNamespace(functionResource.getMetadata().getNamespace())
+				.withName(functionName)
+				.scale(replicas);		
 	}
 
 	/**
