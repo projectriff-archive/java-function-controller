@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -288,7 +289,7 @@ public class FunctionMonitor {
 
 		/**
 		 * Compute the desired replica count for a function. This function leverages these 4
-		 * values (currently non configurable):
+		 * values (currently non configurable except for "maxReplicas"):
 		 * <ul>
 		 * <li>minReplicas (>= 0, default 0)</li>
 		 * <li>maxReplicas (minReplicas <= maxReplicas <= partitionCount, default
@@ -306,6 +307,10 @@ public class FunctionMonitor {
 			long lag = lags.get(fnName);
 			String input = f.getSpec().getInput();
 			int partitionCount = partitionCount(input);
+			if (partitionCount == 0) {
+				logger.debug("Setting replicas to 0 for {}; input topic unavailable: {}", fnName, input);
+				return 0;
+			}
 
 			// TODO: those 3 numbers part of Function spec?
 			int lagRequiredForMax = 10;
@@ -328,7 +333,9 @@ public class FunctionMonitor {
 		}
 
 		private int partitionCount(String input) {
-			waitForTopic(input);
+			if (!waitForTopic(input)) {
+				return 0;
+			}
 			TopicSpec spec = topics.get(input).getSpec();
 			if (spec == null || spec.getPartitions() == null) {
 				return 1;
@@ -338,12 +345,14 @@ public class FunctionMonitor {
 			}
 		}
 
-		private void waitForTopic(String input) {
+		private boolean waitForTopic(String input) {
 			try {
-				topicsReady.computeIfAbsent(input, i -> new CountDownLatch(1)).await();
+				return topicsReady.computeIfAbsent(input, i -> new CountDownLatch(1))
+						.await(1, TimeUnit.SECONDS);
 			}
 			catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
+				return false;
 			}
 		}
 

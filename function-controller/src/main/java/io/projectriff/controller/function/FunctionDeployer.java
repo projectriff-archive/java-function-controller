@@ -114,7 +114,7 @@ public class FunctionDeployer {
 		this.kubernetesClient.extensions().deployments()
 				.inNamespace(functionResource.getMetadata().getNamespace())
 				.withName(functionName)
-				.scale(replicas);		
+				.scale(replicas);
 	}
 
 	/**
