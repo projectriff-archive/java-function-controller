@@ -75,7 +75,7 @@ public class FunctionDeployer {
 		// @formatter:off
 		this.kubernetesClient.extensions().deployments()
 				.inNamespace(functionResource.getMetadata().getNamespace())
-				.createOrReplaceWithNew()
+				.createNew()
 					.withApiVersion("extensions/v1beta1")
 					.withNewMetadata()
 						.withName(functionName)
