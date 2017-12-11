@@ -66,11 +66,12 @@ public class FunctionDeployer {
 	}
 
 	/**
-	 * Requests that the given function be deployed with N replicas.
+	 * Requests that the given function be deployed with 0 replicas.
 	 */
-	public void deploy(XFunction functionResource, int replicas) {
+	public void deploy(XFunction functionResource) {
 		String functionName = functionResource.getMetadata().getName();
-		logger.debug("Setting {} replicas for {}", replicas, functionName);
+		int replicas = 0; // TODO: allow configuration of minReplicas for a function?
+		logger.debug("Deploying {} with {} replicas", functionName, replicas);
 		// @formatter:off
 		this.kubernetesClient.extensions().deployments()
 				.inNamespace(functionResource.getMetadata().getNamespace())
@@ -91,6 +92,18 @@ public class FunctionDeployer {
 					.endSpec()
 				.done();
 		// @formatter:on
+	}
+
+	/**
+	 * Requests that the given function's deployment be scaled to N replicas.
+	 */
+	public void scale(XFunction functionResource, int replicas) {
+		String functionName = functionResource.getMetadata().getName();
+		logger.debug("Setting {} replicas for {}", replicas, functionName);
+		this.kubernetesClient.extensions().deployments()
+				.inNamespace(functionResource.getMetadata().getNamespace())
+				.withName(functionName)
+				.scale(replicas);		
 	}
 
 	/**

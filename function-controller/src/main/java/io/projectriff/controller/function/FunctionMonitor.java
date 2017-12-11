@@ -99,7 +99,7 @@ public class FunctionMonitor {
 		XFunction functionResource = event.getResource();
 		String functionName = functionResource.getMetadata().getName();
 		this.functions.put(functionName, functionResource);
-		this.deployer.deploy(functionResource, 0);
+		this.deployer.deploy(functionResource);
 		this.lagTracker.beginTracking(functionName, functionResource.getSpec().getInput());
 		this.updateScalerInterval();
 		if (this.running.compareAndSet(false, true)) {
@@ -245,7 +245,7 @@ public class FunctionMonitor {
 									interpolation, name, rounded, desired, current);
 							if (current == 0 && desired > 0) {
 								// Special case when scaling from 0
-								deployer.deploy(f, 1);
+								deployer.scale(f, 1);
 							}
 							else if (rounded != current) {
 								// Special case when going back to 0
@@ -259,7 +259,7 @@ public class FunctionMonitor {
 									else {
 										if (now >= start + idleTimeout) {
 											scaleDownStartTimes.remove(name);
-											deployer.deploy(f, rounded);
+											deployer.scale(f, rounded);
 										}
 										else {
 											if (currentPositionSum > scaleDownPositionSums.get(name)) {
@@ -275,7 +275,7 @@ public class FunctionMonitor {
 									}
 								}
 								else {
-									deployer.deploy(f, rounded);
+									deployer.scale(f, rounded);
 									scaleDownStartTimes.remove(name);
 								}
 							}
