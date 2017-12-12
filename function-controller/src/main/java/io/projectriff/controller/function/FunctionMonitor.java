@@ -78,7 +78,13 @@ public class FunctionMonitor {
 	 * Keeps track of the sum of end positions for all partitions of a scaling-to-0 function's
 	 * input topic
 	 */
-	private final Map<String, Long> scaleDownPositionSums = new ConcurrentHashMap<>();
+	private final Map<String, Long> scaleDownEndPositionSums = new ConcurrentHashMap<>();
+
+	/**
+	 * Keeps track of the sum of current positions for all partitions of a scaling 1-to-N
+	 * function's input topic
+	 */
+	private final Map<String, Long> scaleUpCurrentPositionSums = new ConcurrentHashMap<>();
 
 	@Autowired
 	private FunctionDeployer deployer;
@@ -217,11 +223,18 @@ public class FunctionMonitor {
 							e -> e.getValue().stream()
 									.mapToLong(LagTracker.Offsets::getLag)
 									.max().getAsLong()));
-			Map<String, Long> positionSums = offsets.entrySet().stream()
+			Map<String, Long> endPositionSums = offsets.entrySet().stream()
 					.collect(Collectors.toMap(
 							e -> e.getKey().group,
 							e -> e.getValue().stream()
-									.mapToLong(LagTracker.Offsets::getEnd).sum()));
+									.mapToLong(LagTracker.Offsets::getEnd)
+									.sum()));
+			Map<String, Long> currentPositionSums = offsets.entrySet().stream()
+					.collect(Collectors.toMap(
+							e -> e.getKey().group,
+							e -> e.getValue().stream()
+									.mapToLong(LagTracker.Offsets::getCurrent)
+									.sum()));
 			functions.values().stream().forEach(
 					f -> {
 						String name = f.getMetadata().getName();
@@ -230,7 +243,8 @@ public class FunctionMonitor {
 							idleTimeout = DEFAULT_IDLE_TIMEOUT;
 						}
 
-						long currentPositionSum = positionSums.get(name);
+						long endPositionSum = endPositionSums.get(name);
+						long currentPositionSum = currentPositionSums.get(name);
 						int desired = computeDesiredReplicaCount(lags, f);
 						int current = actualReplicaCount.computeIfAbsent(name, k -> 0);
 
@@ -255,7 +269,7 @@ public class FunctionMonitor {
 									long now = System.currentTimeMillis();
 									if (start == null) {
 										scaleDownStartTimes.put(name, now);
-										scaleDownPositionSums.put(name, currentPositionSum);
+										scaleDownEndPositionSums.put(name, endPositionSum);
 									}
 									else {
 										if (now >= start + idleTimeout) {
@@ -263,10 +277,10 @@ public class FunctionMonitor {
 											deployer.scale(f, rounded);
 										}
 										else {
-											if (currentPositionSum > scaleDownPositionSums.get(name)) {
+											if (endPositionSum > scaleDownEndPositionSums.get(name)) {
 												// still active, reset the clock
 												scaleDownStartTimes.remove(name);
-												scaleDownPositionSums.remove(name);
+												scaleDownEndPositionSums.remove(name);
 											}
 											else {
 												logger.debug("Waiting another {}ms to scale back down to 0 for {}",
@@ -276,7 +290,21 @@ public class FunctionMonitor {
 									}
 								}
 								else {
-									deployer.scale(f, rounded);
+									if (rounded > current) {
+										Long previous = scaleUpCurrentPositionSums.put(name, currentPositionSum);
+										if (previous == null || previous < currentPositionSum) {
+											deployer.scale(f, rounded);
+										}
+										else {
+											logger.trace("No consumer activity since last up-scale for {}; "
+													+ "Waiting to scale more.", name);
+										}
+									}
+									else {
+										// scaling down in the N->1 range
+										deployer.scale(f, rounded);
+										scaleUpCurrentPositionSums.remove(name);
+									}
 									scaleDownStartTimes.remove(name);
 								}
 							}
