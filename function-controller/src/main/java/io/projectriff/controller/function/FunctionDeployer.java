@@ -35,6 +35,7 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 
 import io.projectriff.kubernetes.api.model.XFunction;
 
@@ -72,8 +73,9 @@ public class FunctionDeployer {
 		String functionName = functionResource.getMetadata().getName();
 		int replicas = 0; // TODO: allow configuration of minReplicas for a function?
 		logger.debug("Deploying {} with {} replicas", functionName, replicas);
-		// @formatter:off
-		this.kubernetesClient.extensions().deployments()
+		try {
+			// @formatter:off
+			this.kubernetesClient.extensions().deployments()
 				.inNamespace(functionResource.getMetadata().getNamespace())
 				.createNew()
 					.withApiVersion("extensions/v1beta1")
@@ -91,7 +93,16 @@ public class FunctionDeployer {
 						.endTemplate()
 					.endSpec()
 				.done();
-		// @formatter:on
+			// @formatter:on
+		}
+		catch (KubernetesClientException e) {
+			if ("AlreadyExists".equals(e.getStatus().getReason())) {
+				logger.debug("Deployment for {} already exists.", functionName);
+			}
+			else {
+				throw e;
+			}
+		}
 	}
 
 	/**
