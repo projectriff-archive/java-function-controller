@@ -27,7 +27,7 @@
 
 	<groupId>io.projectriff</groupId>
 	<artifactId>riff-kubernetes-client</artifactId>
-	<version>0.0.2-snapshot</version>
+	<version>0.0.2</version>
 	<packaging>jar</packaging>
 
 	<properties>
