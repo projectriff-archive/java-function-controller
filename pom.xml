@@ -4,7 +4,7 @@
 
 	<groupId>io.projectriff</groupId>
 	<artifactId>riff-parent</artifactId>
-	<version>0.0.2</version>
+	<version>0.0.3-snapshot</version>
 	<packaging>pom</packaging>
 
 	<parent>
@@ -45,12 +45,12 @@
 			<dependency>
 				<groupId>io.projectriff</groupId>
 				<artifactId>riff-kubernetes-client</artifactId>
-				<version>0.0.2</version>
+				<version>0.0.3-snapshot</version>
 			</dependency>
 			<dependency>
 				<groupId>io.projectriff</groupId>
 				<artifactId>riff-test-support</artifactId>
-				<version>0.0.2</version>
+				<version>0.0.3-snapshot</version>
 			</dependency>
 			<dependency>
 				<groupId>org.springframework.kafka</groupId>
