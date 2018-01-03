@@ -96,13 +96,21 @@ func (c *ctrl) onFunctionAddedOrUpdated(function *v1.Function) {
 	log.Printf("Function added: %v", *function)
 	c.functions[key(function)] = function
 	c.lagTracker.BeginTracking(Subscription{Topic: function.Spec.Input, Group: function.Name})
-	c.deployer.Deploy(function)
+	err := c.deployer.Deploy(function)
+	if err != nil {
+		log.Printf("Error %v", err)
+	}
+
 }
 func (c *ctrl) onFunctionDeleted(function *v1.Function) {
 	log.Printf("Function deleted: %v", *function)
 	delete(c.functions, key(function))
 	c.lagTracker.StopTracking(Subscription{Topic: function.Spec.Input, Group: function.Name})
-	c.deployer.Undeploy(function)
+	err := c.deployer.Undeploy(function)
+	if err != nil {
+		log.Printf("Error %v", err)
+	}
+
 }
 func key(function *v1.Function) fnKey {
 	return fnKey{name: function.Name}
@@ -114,11 +122,16 @@ func (c *ctrl) scale() {
 	offsets := c.lagTracker.Compute()
 	lags := aggregate(offsets)
 
+	log.Printf("Offsets = %v, Lags = %v", offsets, lags)
+
 	for k, fn := range c.functions {
 		desired := computeDesiredReplicas(fn, lags)
 
 		if desired != c.actualReplicas[k] {
-			c.deployer.Scale(fn, desired)
+			err := c.deployer.Scale(fn, desired)
+			if err != nil {
+				log.Printf("Error %v", err)
+			}
 			c.actualReplicas[k] = desired // TODO use informer on deployments
 		}
 	}

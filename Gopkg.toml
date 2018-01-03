@@ -23,5 +23,6 @@
 
 [[constraint]]
   name = "github.com/projectriff/kubernetes-crds"
-  branch = "master"
+  branch = "vendor-22122017"
+  source = "github.com/ericbottard/kubernetes-crds"
 
