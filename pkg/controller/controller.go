@@ -27,7 +27,7 @@ import (
 )
 
 // ScalerInterval controls how often to run the scaling strategy, in milliseconds
-const ScalerInterval = 1000
+const ScalerInterval = 5000
 
 // Controller deploys functions by monitoring input lag to registered functions. To do so, it periodically runs
 // some scaling logic and keeps track of (un-)registered functions, topics and deployments.
@@ -117,8 +117,6 @@ func key(function *v1.Function) fnKey {
 }
 
 func (c *ctrl) scale() {
-	log.Printf("Scaling... %v", c.functions)
-
 	offsets := c.lagTracker.Compute()
 	lags := aggregate(offsets)
 
@@ -137,7 +135,7 @@ func (c *ctrl) scale() {
 	}
 }
 
-func computeDesiredReplicas(function *v1.Function, lags map[fnKey]uint64) int {
+func computeDesiredReplicas(function *v1.Function, lags map[fnKey]int64) int {
 	return int(lags[key(function)])
 }
 
@@ -172,16 +170,24 @@ func NewController(topicsInformer informersV1.TopicInformer,
 	return pctrl
 }
 
-func aggregate(offsets map[Subscription]Offsets) map[fnKey]uint64 {
-	result := make(map[fnKey]uint64)
+func aggregate(offsets map[Subscription][]Offsets) map[fnKey]int64 {
+	result := make(map[fnKey]int64)
 	for s, o := range offsets {
 		k := fnKey{s.Group}
-		result[k] = max(result[k], o.Lag)
+		result[k] = max(result[k], reduce(o))
 	}
 	return result
 }
 
-func max(a uint64, b uint64) uint64 {
+func reduce(offsets []Offsets) int64 {
+	result := int64(0)
+	for _, o := range offsets {
+		result = max(result, o.Lag)
+	}
+	return result
+}
+
+func max(a int64, b int64) int64 {
 	if a > b {
 		return a
 	} else {
