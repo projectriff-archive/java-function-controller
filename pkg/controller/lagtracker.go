@@ -108,48 +108,36 @@ func (t *tracker) Compute() map[Subscription][]Offsets {
 	if t.endOffsetTrackingConsumer == nil {
 		return result
 	}
-	endOffsets := t.endOffsetTrackingConsumer.HighWaterMarks()
-	log.Printf("endOffsets: %v", endOffsets)
 
 	for s, _ := range t.subscriptions {
-		broker, err := t.client.Coordinator(s.Group)
-		if err != nil {
+		parts, err := t.client.Partitions(s.Topic)
+
+		var offsetManager sarama.OffsetManager
+		if offsetManager, err = sarama.NewOffsetManagerFromClient(s.Group, t.client); err != nil {
 			log.Printf("Got error %v", err)
 		}
-		req := &sarama.OffsetFetchRequest{ConsumerGroup: s.Group, Version: 1}
-		ends := endOffsets[s.Topic]
-		os := make([]Offsets, len(ends))
-		i := 0
-		for part, end := range ends {
-			os[i] = Offsets{Partition: part, End: end}
-			req.AddPartition(s.Topic, part)
-			i++
-		}
-		response, err := broker.FetchOffset(req)
-		if err != nil {
-			log.Printf("Got error %v", err)
-		}
-		for part, _ := range ends {
-			block := response.GetBlock(s.Topic, part)
-			if block == nil {
-				log.Printf("Missing block: %v %v", s.Topic, part)
+		os := make([]Offsets, len(parts))
+		for index, part := range parts {
+			var end int64
+			if end, err = t.client.GetOffset(s.Topic, part, sarama.OffsetNewest); err != nil {
+				log.Printf("Got error %v", err)
 			}
-			for index, _ := range os {
-				if os[index].Partition == part && block.Err == sarama.ErrNoError {
-					i--
-					if block.Offset != -1 {
-						os[index].Current = block.Offset
-					} else {
-						os[index].Current = os[index].End
-					}
-					os[index].Lag = os[index].End - os[index].Current
-					break
-				}
+
+			var pom sarama.PartitionOffsetManager
+			if pom, err = offsetManager.ManagePartition(s.Topic, part); err != nil {
+				log.Printf("Got error %v", err)
 			}
-			if i != 0 {
-				//panic("Did not match all partition structs")
+			off, _ := pom.NextOffset()
+			os[index].Partition = part
+			os[index].End = end
+			if off == sarama.OffsetNewest {
+				os[index].Current = 0
+			} else {
+				os[index].Current = off
 			}
+			os[index].Lag = os[index].End - os[index].Current
 		}
+
 		result[s] = os
 	}
 	return result

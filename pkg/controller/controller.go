@@ -77,7 +77,7 @@ func (c *ctrl) Run(stopCh <-chan struct{}) {
 			c.onFunctionDeleted(function)
 		case <-time.After(time.Millisecond * ScalerInterval):
 			c.scale()
-		case <-stopCh:
+		case <-stopCh: // Maybe listen in another goroutine
 			close(informerStop)
 		}
 	}
@@ -100,18 +100,19 @@ func (c *ctrl) onFunctionAddedOrUpdated(function *v1.Function) {
 	if err != nil {
 		log.Printf("Error %v", err)
 	}
-
 }
+
 func (c *ctrl) onFunctionDeleted(function *v1.Function) {
 	log.Printf("Function deleted: %v", *function)
 	delete(c.functions, key(function))
+	delete(c.actualReplicas, key(function))
 	c.lagTracker.StopTracking(Subscription{Topic: function.Spec.Input, Group: function.Name})
 	err := c.deployer.Undeploy(function)
 	if err != nil {
 		log.Printf("Error %v", err)
 	}
-
 }
+
 func key(function *v1.Function) fnKey {
 	return fnKey{name: function.Name}
 }
@@ -124,6 +125,8 @@ func (c *ctrl) scale() {
 
 	for k, fn := range c.functions {
 		desired := computeDesiredReplicas(fn, lags)
+
+		log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
 
 		if desired != c.actualReplicas[k] {
 			err := c.deployer.Scale(fn, desired)
