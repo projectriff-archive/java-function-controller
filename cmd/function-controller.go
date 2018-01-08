@@ -29,7 +29,10 @@ import (
 	"syscall"
 
 	"github.com/projectriff/function-controller/pkg/controller"
-	informersV1 "github.com/projectriff/kubernetes-crds/pkg/client/informers/externalversions/projectriff/v1"
+	riffInformersV1 "github.com/projectriff/kubernetes-crds/pkg/client/informers/externalversions/projectriff/v1"
+	k8sInformers "k8s.io/client-go/informers"
+	"k8s.io/client-go/informers/extensions/v1beta1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -48,12 +51,12 @@ func main() {
 		log.Fatalf("Error getting client config: %s", err.Error())
 	}
 
-	topicsInformer, functionsInformer := makeInformers(config)
+	topicsInformer, functionsInformer, deploymentInformer := makeInformers(config)
 	deployer, err := controller.NewDeployer(config, brokers)
 	if err != nil {
 		panic(err)
 	}
-	ctrl := controller.New(topicsInformer, functionsInformer, deployer, controller.NewLagTracker(brokers))
+	ctrl := controller.New(topicsInformer, functionsInformer, deploymentInformer, deployer, controller.NewLagTracker(brokers))
 
 	stopCh := make(chan struct{})
 	go ctrl.Run(stopCh)
@@ -69,7 +72,7 @@ func main() {
 
 }
 
-func makeInformers(config *rest.Config) (informersV1.TopicInformer, informersV1.FunctionInformer) {
+func makeInformers(config *rest.Config) (riffInformersV1.TopicInformer, riffInformersV1.FunctionInformer, v1beta1.DeploymentInformer) {
 	riffClient, err := riffcs.NewForConfig(config)
 	if err != nil {
 		log.Fatalf("Error building riff clientset: %s", err.Error())
@@ -77,5 +80,8 @@ func makeInformers(config *rest.Config) (informersV1.TopicInformer, informersV1.
 	riffInformerFactory := informers.NewSharedInformerFactory(riffClient, 0)
 	topicsInformer := riffInformerFactory.Projectriff().V1().Topics()
 	functionsInformer := riffInformerFactory.Projectriff().V1().Functions()
-	return topicsInformer, functionsInformer
+
+	k8sClient, err := kubernetes.NewForConfig(config)
+	deploymentInformer := k8sInformers.NewSharedInformerFactory(k8sClient, 0).Extensions().V1beta1().Deployments()
+	return topicsInformer, functionsInformer, deploymentInformer
 }

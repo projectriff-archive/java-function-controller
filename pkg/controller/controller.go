@@ -23,6 +23,8 @@ import (
 
 	"github.com/projectriff/kubernetes-crds/pkg/apis/projectriff.io/v1"
 	informersV1 "github.com/projectriff/kubernetes-crds/pkg/client/informers/externalversions/projectriff/v1"
+	"k8s.io/api/extensions/v1beta1"
+	informersV1Beta1 "k8s.io/client-go/informers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -37,13 +39,16 @@ type Controller interface {
 }
 
 type ctrl struct {
-	topicsAddedOrUpdated    chan *v1.Topic
-	topicsDeleted           chan *v1.Topic
-	functionsAddedOrUpdated chan *v1.Function
-	functionsDeleted        chan *v1.Function
+	topicsAddedOrUpdated      chan *v1.Topic
+	topicsDeleted             chan *v1.Topic
+	functionsAddedOrUpdated   chan *v1.Function
+	functionsDeleted          chan *v1.Function
+	deploymentsAddedOrUpdated chan *v1beta1.Deployment // TODO investigate deprecation -> apps?
+	deploymentsDeleted        chan *v1beta1.Deployment // TODO investigate deprecation -> apps?
 
-	topicsInformer    informersV1.TopicInformer
-	functionsInformer informersV1.FunctionInformer
+	topicInformer      informersV1.TopicInformer
+	functionInformer   informersV1.FunctionInformer
+	deploymentInformer informersV1Beta1.DeploymentInformer
 
 	functions      map[fnKey]*v1.Function
 	topics         map[topicKey]*v1.Topic
@@ -68,8 +73,9 @@ func (c *ctrl) Run(stopCh <-chan struct{}) {
 
 	// Run informer
 	informerStop := make(chan struct{})
-	go c.topicsInformer.Informer().Run(informerStop)
-	go c.functionsInformer.Informer().Run(informerStop)
+	go c.topicInformer.Informer().Run(informerStop)
+	go c.functionInformer.Informer().Run(informerStop)
+	go c.deploymentInformer.Informer().Run(informerStop)
 
 	for {
 		select {
@@ -81,6 +87,10 @@ func (c *ctrl) Run(stopCh <-chan struct{}) {
 			c.onFunctionAddedOrUpdated(function)
 		case function := <-c.functionsDeleted:
 			c.onFunctionDeleted(function)
+		case deployment := <-c.deploymentsAddedOrUpdated:
+			c.onDeploymentAddedOrUpdated(deployment)
+		case deployment := <-c.deploymentsDeleted:
+			c.onDeploymentDeleted(deployment)
 		case <-time.After(time.Millisecond * ScalerInterval):
 			c.scale()
 		case <-stopCh: // Maybe listen in another goroutine
@@ -91,17 +101,17 @@ func (c *ctrl) Run(stopCh <-chan struct{}) {
 }
 
 func (c *ctrl) onTopicAddedOrUpdated(topic *v1.Topic) {
-	log.Printf("Topic added: %v", *topic)
+	log.Printf("Topic added: %v", topic.Name)
 	c.topics[tkey(topic)] = topic
 }
 
 func (c *ctrl) onTopicDeleted(topic *v1.Topic) {
-	log.Printf("Topic deleted: %v", *topic)
+	log.Printf("Topic deleted: %v", topic.Name)
 	delete(c.topics, tkey(topic))
 }
 
 func (c *ctrl) onFunctionAddedOrUpdated(function *v1.Function) {
-	log.Printf("Function added: %v", *function)
+	log.Printf("Function added: %v", function.Name)
 	c.functions[key(function)] = function
 	c.lagTracker.BeginTracking(Subscription{Topic: function.Spec.Input, Group: function.Name})
 	err := c.deployer.Deploy(function)
@@ -111,13 +121,34 @@ func (c *ctrl) onFunctionAddedOrUpdated(function *v1.Function) {
 }
 
 func (c *ctrl) onFunctionDeleted(function *v1.Function) {
-	log.Printf("Function deleted: %v", *function)
+	log.Printf("Function deleted: %v", function.Name)
 	delete(c.functions, key(function))
-	delete(c.actualReplicas, key(function))
 	c.lagTracker.StopTracking(Subscription{Topic: function.Spec.Input, Group: function.Name})
 	err := c.deployer.Undeploy(function)
 	if err != nil {
 		log.Printf("Error %v", err)
+	}
+}
+
+func (c *ctrl) onDeploymentAddedOrUpdated(deployment *v1beta1.Deployment) {
+	log.Printf("Deployment added/updated: %v", deployment.Name)
+	if key := functionKey(deployment); key != nil {
+		c.actualReplicas[*key] = int(deployment.Status.Replicas)
+	}
+}
+
+func (c *ctrl) onDeploymentDeleted(deployment *v1beta1.Deployment) {
+	log.Printf("Deployment deleted: %v", deployment.Name)
+	if key := functionKey(deployment); key != nil {
+		delete(c.actualReplicas, *key)
+	}
+}
+
+func functionKey(deployment *v1beta1.Deployment) *fnKey {
+	if deployment.Labels["function"] != "" {
+		return &fnKey{deployment.Labels["function"]}
+	} else {
+		return nil
 	}
 }
 
@@ -133,19 +164,18 @@ func (c *ctrl) scale() {
 	offsets := c.lagTracker.Compute()
 	lags := aggregate(offsets)
 
-	log.Printf("Offsets = %v, Lags = %v", offsets, lags)
+	//log.Printf("Offsets = %v, Lags = %v", offsets, lags)
 
 	for k, fn := range c.functions {
 		desired := c.computeDesiredReplicas(fn, lags)
 
-		log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
+		//log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
 
 		if desired != c.actualReplicas[k] {
 			err := c.deployer.Scale(fn, desired)
 			if err != nil {
 				log.Printf("Error %v", err)
 			}
-			c.actualReplicas[k] = desired // TODO use informer on deployments
 		}
 	}
 }
@@ -154,7 +184,6 @@ func (c *ctrl) computeDesiredReplicas(function *v1.Function, lags map[fnKey]int6
 	maxReplicas := 1
 	if t, ok := c.topics[topicKey{function.Spec.Input}]; ok {
 		maxReplicas = int(*t.Spec.Partitions)
-		log.Printf("%v vs. %v", maxReplicas, lags[key(function)])
 	}
 	return min(int(lags[key(function)]), maxReplicas)
 }
@@ -168,25 +197,29 @@ func min(a int, b int) int {
 }
 
 // NewController initialises a new function controller, adding event handlers to the provided informers.
-func New(topicsInformer informersV1.TopicInformer,
-	functionsInformer informersV1.FunctionInformer,
+func New(topicInformer informersV1.TopicInformer,
+	functionInformer informersV1.FunctionInformer,
+	deploymentInformer informersV1Beta1.DeploymentInformer,
 	deployer Deployer,
 	tracker LagTracker) Controller {
 
 	pctrl := &ctrl{
-		topicsAddedOrUpdated:    make(chan *v1.Topic, 100),
-		topicsDeleted:           make(chan *v1.Topic, 100),
-		topicsInformer:          topicsInformer,
-		functionsAddedOrUpdated: make(chan *v1.Function, 100),
-		functionsDeleted:        make(chan *v1.Function, 100),
-		functionsInformer:       functionsInformer,
-		functions:               make(map[fnKey]*v1.Function),
-		topics:                  make(map[topicKey]*v1.Topic),
-		actualReplicas:          make(map[fnKey]int),
-		deployer:                deployer,
-		lagTracker:              tracker,
+		topicsAddedOrUpdated:      make(chan *v1.Topic, 100),
+		topicsDeleted:             make(chan *v1.Topic, 100),
+		topicInformer:             topicInformer,
+		functionsAddedOrUpdated:   make(chan *v1.Function, 100),
+		functionsDeleted:          make(chan *v1.Function, 100),
+		functionInformer:          functionInformer,
+		deploymentsAddedOrUpdated: make(chan *v1beta1.Deployment, 100),
+		deploymentsDeleted:        make(chan *v1beta1.Deployment, 100),
+		deploymentInformer:        deploymentInformer,
+		functions:                 make(map[fnKey]*v1.Function),
+		topics:                    make(map[topicKey]*v1.Topic),
+		actualReplicas:            make(map[fnKey]int),
+		deployer:                  deployer,
+		lagTracker:                tracker,
 	}
-	topicsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	topicInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			topic := obj.(*v1.Topic)
 			v1.SetObjectDefaults_Topic(topic)
@@ -203,10 +236,15 @@ func New(topicsInformer informersV1.TopicInformer,
 			pctrl.topicsDeleted <- topic
 		},
 	})
-	functionsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	functionInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) { pctrl.functionsAddedOrUpdated <- obj.(*v1.Function) },
 		UpdateFunc: func(old interface{}, new interface{}) { pctrl.functionsAddedOrUpdated <- new.(*v1.Function) },
 		DeleteFunc: func(obj interface{}) { pctrl.functionsDeleted <- obj.(*v1.Function) },
+	})
+	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { pctrl.deploymentsAddedOrUpdated <- obj.(*v1beta1.Deployment) },
+		UpdateFunc: func(old interface{}, new interface{}) { pctrl.deploymentsAddedOrUpdated <- new.(*v1beta1.Deployment) },
+		DeleteFunc: func(obj interface{}) { pctrl.deploymentsDeleted <- obj.(*v1beta1.Deployment) },
 	})
 	return pctrl
 }
