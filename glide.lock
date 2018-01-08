@@ -1,5 +1,5 @@
 hash: 5d366c1d2a4c2aa181c9481d5d1cf62fc71878490ccecf2d136f5db1284d8402
-updated: 2018-01-03T14:03:18.48326+01:00
+updated: 2018-01-08T15:48:29.061484+01:00
 imports:
 - name: github.com/bsm/sarama-cluster
   version: 24016d206c730276dfb58f802999066f2f4bfeaa
@@ -89,7 +89,7 @@ imports:
   subpackages:
   - xxHash32
 - name: github.com/projectriff/kubernetes-crds
-  version: c65f55094cf082bc35f5267fcb740866b867c6af
+  version: 7a9b23a4bb1d3087d3b8ff7cb430d27a6b569edc
   repo: git@github.com:ericbottard/kubernetes-crds
   subpackages:
   - pkg/apis/projectriff.io
@@ -109,7 +109,7 @@ imports:
 - name: github.com/rcrowley/go-metrics
   version: e181e095bae94582363434144c61a9653aff6e50
 - name: github.com/Shopify/sarama
-  version: f196330231e867c80737487edc4c3512b1431529
+  version: f0c32558d5e8d914b3de1a6f504e2ca88aaa40c4
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: golang.org/x/crypto
@@ -149,7 +149,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: k8s.io/api
-  version: f63f838f2e6d362a1fd4a710ae13f603e4b51ea9
+  version: 389dfa299845bcf399c16af89987e8775718ea48
   subpackages:
   - admissionregistration/v1alpha1
   - apps/v1beta1
@@ -176,7 +176,7 @@ imports:
   - storage/v1
   - storage/v1beta1
 - name: k8s.io/apimachinery
-  version: 5134afd2c0c91158afac0d8a28bd2177185a3bcc
+  version: bc110fd540ab678abbf2bc71d9ce908eb9325ef6
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -219,7 +219,7 @@ imports:
   - pkg/watch
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
-  version: 1b75876d45719a84085528ee621939b0c68a4b85
+  version: 3a46b5de730a74e064197a157c96c2d29724a677
   subpackages:
   - discovery
   - kubernetes

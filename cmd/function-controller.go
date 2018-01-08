@@ -53,7 +53,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ctrl := controller.NewController(topicsInformer, functionsInformer, deployer, controller.NewLagTracker(brokers))
+	ctrl := controller.New(topicsInformer, functionsInformer, deployer, controller.NewLagTracker(brokers))
 
 	stopCh := make(chan struct{})
 	go ctrl.Run(stopCh)

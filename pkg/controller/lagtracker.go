@@ -52,123 +52,78 @@ type Offsets struct {
 }
 
 type tracker struct {
-	subscriptions             map[Subscription]bool
-	endOffsetTrackingConsumer *cluster.Consumer
-	brokers                   []string
-	client                    *cluster.Client
+	subscriptions map[Subscription]bool
+	client        *cluster.Client
 }
 
 func (t *tracker) BeginTracking(s Subscription) error {
-	oldTopics := t.topicsSubscribedTo()
-	_, topicAlreadySubscribedTo := oldTopics[s.Topic]
 	t.subscriptions[s] = true
-	if !topicAlreadySubscribedTo {
-		if t.endOffsetTrackingConsumer != nil {
-			err := t.endOffsetTrackingConsumer.Close()
-			if err != nil {
-				return err
-			}
-		}
-		topics := append(keys(oldTopics), s.Topic)
-		c, err := cluster.NewConsumer(t.brokers, "foobar", topics, nil)
-		if err != nil {
-			return err
-		}
-		t.endOffsetTrackingConsumer = c
-	}
 	return nil
 }
 
 func (t *tracker) StopTracking(s Subscription) error {
 	delete(t.subscriptions, s)
-	newTopics := t.topicsSubscribedTo()
-	_, topicStillSubscribedTo := newTopics[s.Topic]
-
-	if !topicStillSubscribedTo {
-		err := t.endOffsetTrackingConsumer.Close()
-		if err != nil {
-			return err
-		}
-		if len(newTopics) > 0 { // Recreate consumer with updated set of topics
-			c, err := cluster.NewConsumer(t.brokers, "foobar", keys(newTopics), nil)
-			if err != nil {
-				return nil
-			}
-			t.endOffsetTrackingConsumer = c
-		} else {
-			t.endOffsetTrackingConsumer = nil
-		}
-	}
 	return nil
 }
 
 func (t *tracker) Compute() map[Subscription][]Offsets {
 	result := make(map[Subscription][]Offsets, len(t.subscriptions))
 
-	if t.endOffsetTrackingConsumer == nil {
-		return result
-	}
-
 	for s, _ := range t.subscriptions {
-		parts, err := t.client.Partitions(s.Topic)
-
-		var offsetManager sarama.OffsetManager
-		if offsetManager, err = sarama.NewOffsetManagerFromClient(s.Group, t.client); err != nil {
-			log.Printf("Got error %v", err)
-		}
-		os := make([]Offsets, len(parts))
-		for index, part := range parts {
-			var end int64
-			if end, err = t.client.GetOffset(s.Topic, part, sarama.OffsetNewest); err != nil {
-				log.Printf("Got error %v", err)
-			}
-
-			var pom sarama.PartitionOffsetManager
-			if pom, err = offsetManager.ManagePartition(s.Topic, part); err != nil {
-				log.Printf("Got error %v", err)
-			}
-			off, _ := pom.NextOffset()
-			os[index].Partition = part
-			os[index].End = end
-			if off == sarama.OffsetNewest {
-				os[index].Current = 0
-			} else {
-				os[index].Current = off
-			}
-			os[index].Lag = os[index].End - os[index].Current
-		}
-
-		result[s] = os
+		result[s] = t.offsetsForSubscription(s)
 	}
 	return result
+}
+
+func (t *tracker) offsetsForSubscription(s Subscription) []Offsets {
+	parts, err := t.client.Partitions(s.Topic)
+	if err != nil {
+
+	}
+
+	os := make([]Offsets, len(parts))
+
+	offsetManager, err := sarama.NewOffsetManagerFromClient(s.Group, t.client)
+	if err != nil {
+		log.Printf("Got error %v", err)
+	}
+	defer offsetManager.Close()
+
+	for index, part := range parts {
+		end, err := t.client.GetOffset(s.Topic, part, sarama.OffsetNewest)
+		if err != nil {
+			log.Printf("Got error %v", err)
+		}
+
+		pom, err := offsetManager.ManagePartition(s.Topic, part)
+		if err != nil {
+			log.Printf("Got error %v", err)
+		}
+		off, _ := pom.NextOffset()
+		var current int64
+		if off == sarama.OffsetNewest {
+			current = 0
+		} else {
+			current = off
+		}
+		os[index] = newOffsets(part, end, current)
+		err = pom.Close()
+	}
+	return os
+}
+
+func newOffsets(part int32, end int64, current int64) Offsets {
+	return Offsets{Partition: part, End: end, Current: current, Lag: end - current}
 }
 
 func NewLagTracker(brokers []string) LagTracker {
 	c, _ := cluster.NewClient(brokers, nil)
 	return &tracker{
 		subscriptions: make(map[Subscription]bool),
-		brokers:       brokers,
 		client:        c,
 	}
 }
 
-func (t *tracker) topicsSubscribedTo() map[string]bool {
-	result := make(map[string]bool, len(t.subscriptions))
-	for s, _ := range t.subscriptions {
-		result[s.Topic] = true
-	}
-	return result
-}
-
-func keys(m map[string]bool) []string {
-	result := make([]string, len(m), 1+len(m))
-	i := 0
-	for k := range m {
-		result[i] = k
-	}
-	return result
-}
-
 func (o Offsets) String() string {
-	return fmt.Sprintf("Offsets[p=%v, lag = %v = %v-%v]", o.Partition, o.Lag, o.End, o.Current)
+	return fmt.Sprintf("Offsets[p=%v, lag= %v (=%v-%v)]", o.Partition, o.Lag, o.End, o.Current)
 }

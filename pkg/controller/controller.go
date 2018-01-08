@@ -27,7 +27,7 @@ import (
 )
 
 // ScalerInterval controls how often to run the scaling strategy, in milliseconds
-const ScalerInterval = 5000
+const ScalerInterval = 100
 
 // Controller deploys functions by monitoring input lag to registered functions. To do so, it periodically runs
 // some scaling logic and keeps track of (un-)registered functions, topics and deployments.
@@ -46,6 +46,7 @@ type ctrl struct {
 	functionsInformer informersV1.FunctionInformer
 
 	functions      map[fnKey]*v1.Function
+	topics         map[topicKey]*v1.Topic
 	actualReplicas map[fnKey]int
 
 	deployer   Deployer
@@ -53,6 +54,11 @@ type ctrl struct {
 }
 
 type fnKey struct {
+	name string
+	// TODO should include namespace as well
+}
+
+type topicKey struct {
 	name string
 }
 
@@ -86,10 +92,12 @@ func (c *ctrl) Run(stopCh <-chan struct{}) {
 
 func (c *ctrl) onTopicAddedOrUpdated(topic *v1.Topic) {
 	log.Printf("Topic added: %v", *topic)
+	c.topics[tkey(topic)] = topic
 }
 
 func (c *ctrl) onTopicDeleted(topic *v1.Topic) {
 	log.Printf("Topic deleted: %v", *topic)
+	delete(c.topics, tkey(topic))
 }
 
 func (c *ctrl) onFunctionAddedOrUpdated(function *v1.Function) {
@@ -117,6 +125,10 @@ func key(function *v1.Function) fnKey {
 	return fnKey{name: function.Name}
 }
 
+func tkey(topic *v1.Topic) topicKey {
+	return topicKey{name: topic.Name}
+}
+
 func (c *ctrl) scale() {
 	offsets := c.lagTracker.Compute()
 	lags := aggregate(offsets)
@@ -124,7 +136,7 @@ func (c *ctrl) scale() {
 	log.Printf("Offsets = %v, Lags = %v", offsets, lags)
 
 	for k, fn := range c.functions {
-		desired := computeDesiredReplicas(fn, lags)
+		desired := c.computeDesiredReplicas(fn, lags)
 
 		log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
 
@@ -138,12 +150,25 @@ func (c *ctrl) scale() {
 	}
 }
 
-func computeDesiredReplicas(function *v1.Function, lags map[fnKey]int64) int {
-	return int(lags[key(function)])
+func (c *ctrl) computeDesiredReplicas(function *v1.Function, lags map[fnKey]int64) int {
+	maxReplicas := 1
+	if t, ok := c.topics[topicKey{function.Spec.Input}]; ok {
+		maxReplicas = int(*t.Spec.Partitions)
+		log.Printf("%v vs. %v", maxReplicas, lags[key(function)])
+	}
+	return min(int(lags[key(function)]), maxReplicas)
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	} else {
+		return b
+	}
 }
 
 // NewController initialises a new function controller, adding event handlers to the provided informers.
-func NewController(topicsInformer informersV1.TopicInformer,
+func New(topicsInformer informersV1.TopicInformer,
 	functionsInformer informersV1.FunctionInformer,
 	deployer Deployer,
 	tracker LagTracker) Controller {
@@ -156,14 +181,27 @@ func NewController(topicsInformer informersV1.TopicInformer,
 		functionsDeleted:        make(chan *v1.Function, 100),
 		functionsInformer:       functionsInformer,
 		functions:               make(map[fnKey]*v1.Function),
+		topics:                  make(map[topicKey]*v1.Topic),
 		actualReplicas:          make(map[fnKey]int),
 		deployer:                deployer,
 		lagTracker:              tracker,
 	}
 	topicsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { pctrl.topicsAddedOrUpdated <- obj.(*v1.Topic) },
-		UpdateFunc: func(old interface{}, new interface{}) { pctrl.topicsAddedOrUpdated <- new.(*v1.Topic) },
-		DeleteFunc: func(obj interface{}) { pctrl.topicsDeleted <- obj.(*v1.Topic) },
+		AddFunc: func(obj interface{}) {
+			topic := obj.(*v1.Topic)
+			v1.SetObjectDefaults_Topic(topic)
+			pctrl.topicsAddedOrUpdated <- topic
+		},
+		UpdateFunc: func(old interface{}, new interface{}) {
+			topic := new.(*v1.Topic)
+			v1.SetObjectDefaults_Topic(topic)
+			pctrl.topicsAddedOrUpdated <- topic
+		},
+		DeleteFunc: func(obj interface{}) {
+			topic := obj.(*v1.Topic)
+			v1.SetObjectDefaults_Topic(topic)
+			pctrl.topicsDeleted <- topic
+		},
 	})
 	functionsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) { pctrl.functionsAddedOrUpdated <- obj.(*v1.Function) },
