@@ -8,6 +8,8 @@ import:
   - pkg/client/clientset/versioned
   - pkg/client/informers/externalversions
   - pkg/client/informers/externalversions/projectriff/v1
+- package: github.com/bsm/sarama-cluster
+  version: v2.1.11
 - package: k8s.io/api
   subpackages:
   - extensions/v1beta1
@@ -20,5 +22,3 @@ import:
   - rest
   - tools/cache
   - tools/clientcmd
-- package: github.com/bsm/sarama-cluster
-  version: v2.1.11

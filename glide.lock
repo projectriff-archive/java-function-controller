@@ -1,8 +1,11 @@
-hash: 5d366c1d2a4c2aa181c9481d5d1cf62fc71878490ccecf2d136f5db1284d8402
-updated: 2018-01-08T15:48:29.061484+01:00
+hash: 13421e2ea1debb54e52e0fffecfbb8842fcfdf747411249e75fa3e76c907ea51
+updated: 2018-01-09T14:45:12.166485+01:00
 imports:
 - name: github.com/bsm/sarama-cluster
   version: 24016d206c730276dfb58f802999066f2f4bfeaa
+  subpackages:
+  - mock
+  - require
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
@@ -112,6 +115,11 @@ imports:
   version: f0c32558d5e8d914b3de1a6f504e2ca88aaa40c4
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
+- name: github.com/stretchr/testify
+  version: b91bfb9ebec76498946beb6af7c0230c7cc7ba6c
+  subpackages:
+  - assert
+  - mock
 - name: golang.org/x/crypto
   version: 81e90905daefcd6fd217b62423c0908922eadb30
   subpackages:
@@ -222,6 +230,41 @@ imports:
   version: 3a46b5de730a74e064197a157c96c2d29724a677
   subpackages:
   - discovery
+  - informers
+  - informers/admissionregistration
+  - informers/admissionregistration/v1alpha1
+  - informers/apps
+  - informers/apps/v1beta1
+  - informers/apps/v1beta2
+  - informers/autoscaling
+  - informers/autoscaling/v1
+  - informers/autoscaling/v2beta1
+  - informers/batch
+  - informers/batch/v1
+  - informers/batch/v1beta1
+  - informers/batch/v2alpha1
+  - informers/certificates
+  - informers/certificates/v1beta1
+  - informers/core
+  - informers/core/v1
+  - informers/extensions
+  - informers/extensions/v1beta1
+  - informers/internalinterfaces
+  - informers/networking
+  - informers/networking/v1
+  - informers/policy
+  - informers/policy/v1beta1
+  - informers/rbac
+  - informers/rbac/v1
+  - informers/rbac/v1alpha1
+  - informers/rbac/v1beta1
+  - informers/scheduling
+  - informers/scheduling/v1alpha1
+  - informers/settings
+  - informers/settings/v1alpha1
+  - informers/storage
+  - informers/storage/v1
+  - informers/storage/v1beta1
   - kubernetes
   - kubernetes/scheme
   - kubernetes/typed/admissionregistration/v1alpha1
@@ -248,6 +291,26 @@ imports:
   - kubernetes/typed/settings/v1alpha1
   - kubernetes/typed/storage/v1
   - kubernetes/typed/storage/v1beta1
+  - listers/admissionregistration/v1alpha1
+  - listers/apps/v1beta1
+  - listers/apps/v1beta2
+  - listers/autoscaling/v1
+  - listers/autoscaling/v2beta1
+  - listers/batch/v1
+  - listers/batch/v1beta1
+  - listers/batch/v2alpha1
+  - listers/certificates/v1beta1
+  - listers/core/v1
+  - listers/extensions/v1beta1
+  - listers/networking/v1
+  - listers/policy/v1beta1
+  - listers/rbac/v1
+  - listers/rbac/v1alpha1
+  - listers/rbac/v1beta1
+  - listers/scheduling/v1alpha1
+  - listers/settings/v1alpha1
+  - listers/storage/v1
+  - listers/storage/v1beta1
   - pkg/version
   - rest
   - rest/watch
@@ -269,4 +332,10 @@ imports:
   version: 868f2f29720b192240e18284659231b440f9cda5
   subpackages:
   - pkg/common
-testImports: []
+testImports:
+- name: github.com/pmezard/go-difflib
+  version: d8ed2627bdf02c080bf22230dbb337003b7aba2d
+  subpackages:
+  - difflib
+- name: github.com/stretchr/objx
+  version: f7fedc474811b6b1b2c2169927a669e70a5d1d51

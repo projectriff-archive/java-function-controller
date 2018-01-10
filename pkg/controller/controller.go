@@ -28,14 +28,17 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// ScalerInterval controls how often to run the scaling strategy, in milliseconds
-const ScalerInterval = 100
+// DefaultScalerInterval controls how often to run the scaling strategy.
+const DefaultScalerInterval = 100 * time.Millisecond
 
 // Controller deploys functions by monitoring input lag to registered functions. To do so, it periodically runs
 // some scaling logic and keeps track of (un-)registered functions, topics and deployments.
 type Controller interface {
 	// Run requests that this controller starts doing its job, until an empty struct is sent on the close channel.
 	Run(closeCh <-chan struct{})
+	// SetScalerInterval changes the interval at which the controller recomputes the required number of replicas for functions.
+	// Should not be called once running.
+	SetScalingInterval(interval time.Duration)
 }
 
 type ctrl struct {
@@ -56,6 +59,8 @@ type ctrl struct {
 
 	deployer   Deployer
 	lagTracker LagTracker
+
+	scalerInterval time.Duration
 }
 
 type fnKey struct {
@@ -91,13 +96,17 @@ func (c *ctrl) Run(stopCh <-chan struct{}) {
 			c.onDeploymentAddedOrUpdated(deployment)
 		case deployment := <-c.deploymentsDeleted:
 			c.onDeploymentDeleted(deployment)
-		case <-time.After(time.Millisecond * ScalerInterval):
+		case <-time.After(c.scalerInterval):
 			c.scale()
 		case <-stopCh: // Maybe listen in another goroutine
 			close(informerStop)
+			return
 		}
 	}
+}
 
+func (c *ctrl) SetScalingInterval(interval time.Duration) {
+	c.scalerInterval = interval
 }
 
 func (c *ctrl) onTopicAddedOrUpdated(topic *v1.Topic) {
@@ -164,15 +173,16 @@ func (c *ctrl) scale() {
 	offsets := c.lagTracker.Compute()
 	lags := aggregate(offsets)
 
-	//log.Printf("Offsets = %v, Lags = %v", offsets, lags)
+	log.Printf("Offsets = %v, Lags = %v", offsets, lags)
 
 	for k, fn := range c.functions {
 		desired := c.computeDesiredReplicas(fn, lags)
 
-		//log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
+		log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
 
 		if desired != c.actualReplicas[k] {
 			err := c.deployer.Scale(fn, desired)
+			c.actualReplicas[k] = desired // This may also be updated by deployments informer later.
 			if err != nil {
 				log.Printf("Error %v", err)
 			}
@@ -218,6 +228,7 @@ func New(topicInformer informersV1.TopicInformer,
 		actualReplicas:            make(map[fnKey]int),
 		deployer:                  deployer,
 		lagTracker:                tracker,
+		scalerInterval:            DefaultScalerInterval,
 	}
 	topicInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {

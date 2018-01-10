@@ -1,4 +1,4 @@
-.PHONY: build build-for-docker clean dockerize
+.PHONY: build build-for-docker clean dockerize gen-mocks
 OUTPUT = function-controller
 OUTPUT_LINUX = $(OUTPUT)-linux
 BUILD_FLAGS =
@@ -32,8 +32,14 @@ $(OUTPUT_LINUX): $(GO_SOURCES) vendor
 	# See e.g. https://blog.codeship.com/building-minimal-docker-containers-for-go-applications/ for details
 	CGO_ENABLED=0 GOOS=linux go build $(BUILD_FLAGS) -v -a -installsuffix cgo -o $(OUTPUT_LINUX) cmd/function-controller.go
 
-vendor: Gopkg.toml
-	dep ensure
+glide.lock: glide.yaml
+	glide up -v
+
+gen-mocks:
+	mockery -name 'TopicInformer|FunctionInformer' -dir vendor/github.com/projectriff/kubernetes-crds/pkg/client/informers/externalversions/projectriff/v1
+	mockery -name 'SharedIndexInformer' -dir vendor/k8s.io/client-go/tools/cache
+	mockery -name 'DeploymentInformer' -dir vendor/k8s.io/client-go/informers/extensions/v1beta1
+	mockery -name 'LagTracker|Deployer' -dir pkg/controller
 
 clean:
 	rm -f $(OUTPUT)
