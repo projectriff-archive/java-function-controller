@@ -190,7 +190,6 @@ func lag(fn *v1.Function, lag ...int) map[controller.Subscription][]controller.O
 	offsets := make([]controller.Offsets, len(lag))
 	for i, _ := range offsets {
 		offsets[i].Partition = int32(i)
-		offsets[i].Lag = int64(lag[i])
 		offsets[i].End = int64(lag[i])
 	}
 	result[controller.Subscription{Group: fn.Name, Topic: fn.Spec.Input}] = offsets

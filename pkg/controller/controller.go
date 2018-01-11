@@ -272,7 +272,7 @@ func aggregate(offsets map[Subscription][]Offsets) map[fnKey]int64 {
 func reduce(offsets []Offsets) int64 {
 	result := int64(0)
 	for _, o := range offsets {
-		result = max(result, o.Lag)
+		result = max(result, o.Lag())
 	}
 	return result
 }

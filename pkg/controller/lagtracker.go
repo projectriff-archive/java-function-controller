@@ -48,7 +48,10 @@ type Offsets struct {
 	Partition int32
 	Current   int64
 	End       int64
-	Lag       int64
+}
+
+func (o Offsets) Lag() int64 {
+	return o.End - o.Current
 }
 
 type tracker struct {
@@ -106,14 +109,10 @@ func (t *tracker) offsetsForSubscription(s Subscription) []Offsets {
 		} else {
 			current = off
 		}
-		os[index] = newOffsets(part, end, current)
+		os[index] = Offsets{Partition: part, End: end, Current: current}
 		err = pom.Close()
 	}
 	return os
-}
-
-func newOffsets(part int32, end int64, current int64) Offsets {
-	return Offsets{Partition: part, End: end, Current: current, Lag: end - current}
 }
 
 func NewLagTracker(brokers []string) LagTracker {

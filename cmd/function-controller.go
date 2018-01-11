@@ -36,10 +36,6 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-type Foo struct {
-	Name string
-}
-
 func main() {
 
 	kubeconfig := flag.String("kubeconf", "", "Path to a kube config. Only required if out-of-cluster.")
