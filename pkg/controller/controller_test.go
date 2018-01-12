@@ -126,8 +126,8 @@ func (suite *ControllerTestSuite) TestFunctionWithNonTrivialInputTopic() {
 	suite.deployer.On("Deploy", fn).Return(nil)
 
 	suite.tracker.On("Compute").Return(lag(fn, 1, 0, 0)).Once()
-	suite.tracker.On("Compute").Return(lag(fn, 2, 0, 0)).Once()
-	suite.tracker.On("Compute").Return(lag(fn, 3, 0, 0)).Once()
+	suite.tracker.On("Compute").Return(lag(fn, 2, 0, 5)).Once()
+	suite.tracker.On("Compute").Return(lag(fn, 3, 1, 2)).Once()
 	suite.deployer.On("Scale", fn, 1).Return(nil)
 	suite.deployer.On("Scale", fn, 2).Return(nil)
 	suite.deployer.On("Scale", fn, 3).Return(nil).Run(func(args mock.Arguments) {
@@ -153,11 +153,11 @@ func (suite *ControllerTestSuite) TestReplicasReconciliation() {
 	topic := &v1.Topic{ObjectMeta: metav1.ObjectMeta{Name: "input"}, Spec: v1.TopicSpec{Partitions: &three}}
 	suite.deployer.On("Deploy", fn).Return(nil)
 
-	suite.tracker.On("Compute").Return(lag(fn, 2, 0, 0)).Run(func(args mock.Arguments) {
+	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Run(func(args mock.Arguments) {
 		computes++
 		log.Printf("C %v", computes)
 	}).Times(5)
-	suite.tracker.On("Compute").Return(lag(fn, 2, 0, 0)).Once().Run(func(args mock.Arguments) {
+	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Once().Run(func(args mock.Arguments) {
 		computes++
 		log.Printf("C %v", computes)
 		// Disrupt actual replicas on 6th computation
@@ -170,7 +170,7 @@ func (suite *ControllerTestSuite) TestReplicasReconciliation() {
 		}
 		suite.deploymentsHandlers.UpdateFunc(&deployment, &deployment)
 	})
-	suite.tracker.On("Compute").Return(lag(fn, 2, 0, 0)).Run(func(args mock.Arguments) {
+	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Run(func(args mock.Arguments) {
 		computes++
 		log.Printf("C %v", computes)
 	}).Once()
@@ -185,12 +185,11 @@ func (suite *ControllerTestSuite) TestReplicasReconciliation() {
 	suite.ctrl.Run(suite.closeCh)
 }
 
-func lag(fn *v1.Function, lag ...int) map[controller.Subscription][]controller.Offsets {
-	result := make(map[controller.Subscription][]controller.Offsets)
-	offsets := make([]controller.Offsets, len(lag))
-	for i, _ := range offsets {
-		offsets[i].Partition = int32(i)
-		offsets[i].End = int64(lag[i])
+func lag(fn *v1.Function, lag ...int) map[controller.Subscription]controller.PartitionedOffsets {
+	result := make(map[controller.Subscription]controller.PartitionedOffsets)
+	offsets := make(controller.PartitionedOffsets, len(lag))
+	for i, l := range lag {
+		offsets[int32(i)] = controller.Offsets{End: int64(l)}
 	}
 	result[controller.Subscription{Group: fn.Name, Topic: fn.Spec.Input}] = offsets
 	return result

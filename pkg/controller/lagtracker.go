@@ -34,7 +34,7 @@ type LagTracker interface {
 	StopTracking(Subscription) error
 
 	// Compute the current lags for all tracked subscriptions
-	Compute() map[Subscription][]Offsets
+	Compute() map[Subscription]PartitionedOffsets
 }
 
 // Subscription describes a tracked tuple of topic and consumer group.
@@ -45,22 +45,30 @@ type Subscription struct {
 
 // Offsets gives per-partition information about current and end offsets.
 type Offsets struct {
-	Partition int32
-	Current   int64
-	End       int64
+	Current     int64
+	End         int64
+	PreviousEnd int64
 }
 
+type PartitionedOffsets map[int32]Offsets
+
+// Lag returns how many messages are available that haven't been handled yet.
 func (o Offsets) Lag() int64 {
 	return o.End - o.Current
 }
 
+// Activity returns how many messages have been handled since a previous query of the tracker.
+func (o Offsets) Activity() int64 {
+	return o.End - o.PreviousEnd
+}
+
 type tracker struct {
-	subscriptions map[Subscription]bool
+	subscriptions map[Subscription]PartitionedOffsets
 	client        *cluster.Client
 }
 
 func (t *tracker) BeginTracking(s Subscription) error {
-	t.subscriptions[s] = true
+	t.subscriptions[s] = make(PartitionedOffsets)
 	return nil
 }
 
@@ -69,22 +77,21 @@ func (t *tracker) StopTracking(s Subscription) error {
 	return nil
 }
 
-func (t *tracker) Compute() map[Subscription][]Offsets {
-	result := make(map[Subscription][]Offsets, len(t.subscriptions))
-
+func (t *tracker) Compute() map[Subscription]PartitionedOffsets {
 	for s, _ := range t.subscriptions {
-		result[s] = t.offsetsForSubscription(s)
+		t.subscriptions[s] = t.offsetsForSubscription(s)
 	}
-	return result
+	return t.subscriptions
 }
 
-func (t *tracker) offsetsForSubscription(s Subscription) []Offsets {
+func (t *tracker) offsetsForSubscription(s Subscription) PartitionedOffsets {
+
 	parts, err := t.client.Partitions(s.Topic)
 	if err != nil {
-
+		log.Printf("Error reading partitions for topic %v: %v", s.Topic, err)
 	}
-
-	os := make([]Offsets, len(parts))
+	oldOffsets := t.subscriptions[s]
+	os := make(PartitionedOffsets, len(oldOffsets))
 
 	offsetManager, err := sarama.NewOffsetManagerFromClient(s.Group, t.client)
 	if err != nil {
@@ -92,7 +99,7 @@ func (t *tracker) offsetsForSubscription(s Subscription) []Offsets {
 	}
 	defer offsetManager.Close()
 
-	for index, part := range parts {
+	for _, part := range parts {
 		end, err := t.client.GetOffset(s.Topic, part, sarama.OffsetNewest)
 		if err != nil {
 			log.Printf("Got error %v", err)
@@ -109,7 +116,7 @@ func (t *tracker) offsetsForSubscription(s Subscription) []Offsets {
 		} else {
 			current = off
 		}
-		os[index] = Offsets{Partition: part, End: end, Current: current}
+		os[part] = Offsets{End: end, Current: current, PreviousEnd: oldOffsets[part].End}
 		err = pom.Close()
 	}
 	return os
@@ -118,11 +125,11 @@ func (t *tracker) offsetsForSubscription(s Subscription) []Offsets {
 func NewLagTracker(brokers []string) LagTracker {
 	c, _ := cluster.NewClient(brokers, nil)
 	return &tracker{
-		subscriptions: make(map[Subscription]bool),
+		subscriptions: make(map[Subscription]PartitionedOffsets),
 		client:        c,
 	}
 }
 
 func (o Offsets) String() string {
-	return fmt.Sprintf("Offsets[p=%v, lag= %v (=%v-%v)]", o.Partition, o.Lag, o.End, o.Current)
+	return fmt.Sprintf("Offsets[lag=%v (=%v-%v), Activity:%v (=%v-%v)]", o.Lag(), o.End, o.Current, o.Activity(), o.End, o.PreviousEnd)
 }

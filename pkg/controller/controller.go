@@ -171,12 +171,12 @@ func tkey(topic *v1.Topic) topicKey {
 
 func (c *ctrl) scale() {
 	offsets := c.lagTracker.Compute()
-	lags := aggregate(offsets)
+	lags := computeDesiredReplicas(offsets)
 
 	log.Printf("Offsets = %v, Lags = %v", offsets, lags)
 
 	for k, fn := range c.functions {
-		desired := c.computeDesiredReplicas(fn, lags)
+		desired := lags[key(fn)]
 
 		log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
 
@@ -187,22 +187,6 @@ func (c *ctrl) scale() {
 				log.Printf("Error %v", err)
 			}
 		}
-	}
-}
-
-func (c *ctrl) computeDesiredReplicas(function *v1.Function, lags map[fnKey]int64) int {
-	maxReplicas := 1
-	if t, ok := c.topics[topicKey{function.Spec.Input}]; ok {
-		maxReplicas = int(*t.Spec.Partitions)
-	}
-	return min(int(lags[key(function)]), maxReplicas)
-}
-
-func min(a int, b int) int {
-	if a < b {
-		return a
-	} else {
-		return b
 	}
 }
 
@@ -260,24 +244,31 @@ func New(topicInformer informersV1.TopicInformer,
 	return pctrl
 }
 
-func aggregate(offsets map[Subscription][]Offsets) map[fnKey]int64 {
-	result := make(map[fnKey]int64)
+// computeDesiredReplicas turns a subscription based map (of offsets) into a function-key based map of how many replicas to spawn.
+// The logic is as follows: for a given topic, look at how many partitions have lag (there is no point in spawning 2
+// replicas if only a single partition has lag, even if it's a 1000 messages lag).
+// If the function has multiple inputs, we take the max of those computations (some topics may be starved but that's ok
+// while we still maximize the throughput for the given topic that has the most needy partitions)
+func computeDesiredReplicas(offsets map[Subscription]PartitionedOffsets) map[fnKey]int {
+	result := make(map[fnKey]int)
 	for s, o := range offsets {
 		k := fnKey{s.Group}
-		result[k] = max(result[k], reduce(o))
+		result[k] = max(result[k], numberOfPartitionsWithLag(o))
 	}
 	return result
 }
 
-func reduce(offsets []Offsets) int64 {
-	result := int64(0)
+func numberOfPartitionsWithLag(offsets PartitionedOffsets) int {
+	result := 0
 	for _, o := range offsets {
-		result = max(result, o.Lag())
+		if o.Lag() > 0 {
+			result++
+		}
 	}
 	return result
 }
 
-func max(a int64, b int64) int64 {
+func max(a int, b int) int {
 	if a > b {
 		return a
 	} else {

@@ -24,15 +24,15 @@ func (_m *LagTracker) BeginTracking(_a0 controller.Subscription) error {
 }
 
 // Compute provides a mock function with given fields:
-func (_m *LagTracker) Compute() map[controller.Subscription][]controller.Offsets {
+func (_m *LagTracker) Compute() map[controller.Subscription]controller.PartitionedOffsets {
 	ret := _m.Called()
 
-	var r0 map[controller.Subscription][]controller.Offsets
-	if rf, ok := ret.Get(0).(func() map[controller.Subscription][]controller.Offsets); ok {
+	var r0 map[controller.Subscription]controller.PartitionedOffsets
+	if rf, ok := ret.Get(0).(func() map[controller.Subscription]controller.PartitionedOffsets); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[controller.Subscription][]controller.Offsets)
+			r0 = ret.Get(0).(map[controller.Subscription]controller.PartitionedOffsets)
 		}
 	}
 
