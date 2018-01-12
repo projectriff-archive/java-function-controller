@@ -245,7 +245,7 @@ func New(topicInformer informersV1.TopicInformer,
 }
 
 // computeDesiredReplicas turns a subscription based map (of offsets) into a function-key based map of how many replicas to spawn.
-// The logic is as follows: for a given topic, look at how many partitions have lag (there is no point in spawning 2
+// The logic is as follows: for a given topic, look at how many partitions have lag or activity (there is no point in spawning 2
 // replicas if only a single partition has lag, even if it's a 1000 messages lag).
 // If the function has multiple inputs, we take the max of those computations (some topics may be starved but that's ok
 // while we still maximize the throughput for the given topic that has the most needy partitions)
@@ -253,15 +253,15 @@ func computeDesiredReplicas(offsets map[Subscription]PartitionedOffsets) map[fnK
 	result := make(map[fnKey]int)
 	for s, o := range offsets {
 		k := fnKey{s.Group}
-		result[k] = max(result[k], numberOfPartitionsWithLag(o))
+		result[k] = max(result[k], numberOfPartitionsWithLagOrActivity(o))
 	}
 	return result
 }
 
-func numberOfPartitionsWithLag(offsets PartitionedOffsets) int {
+func numberOfPartitionsWithLagOrActivity(offsets PartitionedOffsets) int {
 	result := 0
 	for _, o := range offsets {
-		if o.Lag() > 0 {
+		if o.Lag() > 0 || o.Activity() > 0 {
 			result++
 		}
 	}
