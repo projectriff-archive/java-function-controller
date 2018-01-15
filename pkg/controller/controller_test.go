@@ -17,7 +17,6 @@
 package controller_test
 
 import (
-	"log"
 	"testing"
 	"time"
 
@@ -155,11 +154,9 @@ func (suite *ControllerTestSuite) TestReplicasReconciliation() {
 
 	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Run(func(args mock.Arguments) {
 		computes++
-		log.Printf("C %v", computes)
 	}).Times(5)
 	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Once().Run(func(args mock.Arguments) {
 		computes++
-		log.Printf("C %v", computes)
 		// Disrupt actual replicas on 6th computation
 		deployment := v1beta1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
@@ -172,7 +169,6 @@ func (suite *ControllerTestSuite) TestReplicasReconciliation() {
 	})
 	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Run(func(args mock.Arguments) {
 		computes++
-		log.Printf("C %v", computes)
 	}).Once()
 	suite.deployer.On("Scale", fn, 2).Return(nil).Once()
 	suite.deployer.On("Scale", fn, 2).Return(nil).Run(func(args mock.Arguments) {

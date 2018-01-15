@@ -17,7 +17,10 @@
 package controller
 
 import (
+	"bytes"
 	"log"
+	"sort"
+	"strconv"
 
 	"fmt"
 
@@ -45,9 +48,9 @@ type Subscription struct {
 
 // Offsets gives per-partition information about current and end offsets.
 type Offsets struct {
-	Current     int64
-	End         int64
-	PreviousEnd int64
+	Current         int64
+	End             int64
+	PreviousCurrent int64
 }
 
 type PartitionedOffsets map[int32]Offsets
@@ -59,7 +62,7 @@ func (o Offsets) Lag() int64 {
 
 // Activity returns how many messages have been handled since a previous query of the tracker.
 func (o Offsets) Activity() int64 {
-	return o.End - o.PreviousEnd
+	return o.Current - o.PreviousCurrent
 }
 
 type tracker struct {
@@ -116,7 +119,7 @@ func (t *tracker) offsetsForSubscription(s Subscription) PartitionedOffsets {
 		} else {
 			current = off
 		}
-		os[part] = Offsets{End: end, Current: current, PreviousEnd: oldOffsets[part].End}
+		os[part] = Offsets{End: end, Current: current, PreviousCurrent: oldOffsets[part].Current}
 		err = pom.Close()
 	}
 	return os
@@ -131,5 +134,23 @@ func NewLagTracker(brokers []string) LagTracker {
 }
 
 func (o Offsets) String() string {
-	return fmt.Sprintf("Offsets[lag=%v (=%v-%v), Activity:%v (=%v-%v)]", o.Lag(), o.End, o.Current, o.Activity(), o.End, o.PreviousEnd)
+	return fmt.Sprintf("Offsets[lag=%v (=%v-%v), Activity:%v (=%v-%v)]", o.Lag(), o.End, o.Current, o.Activity(), o.Current, o.PreviousCurrent)
+}
+
+func (po PartitionedOffsets) String() string {
+	keys := make([]int, len(po))
+	i := 0
+	for k, _ := range po {
+		keys[i] = int(k)
+		i++
+	}
+	sort.Ints(keys)
+	var buffer bytes.Buffer
+	for _, k := range keys {
+		buffer.WriteString(strconv.Itoa(k))
+		buffer.WriteString(":")
+		buffer.WriteString(po[int32(k)].String())
+		buffer.WriteString(" ")
+	}
+	return buffer.String()
 }

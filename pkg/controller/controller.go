@@ -28,8 +28,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+type ScalingPolicy func(offsets map[Subscription]PartitionedOffsets) map[fnKey]int
+
 // DefaultScalerInterval controls how often to run the scaling strategy.
-const DefaultScalerInterval = 100 * time.Millisecond
+const DefaultScalerInterval = 5000 * time.Millisecond
 
 // Controller deploys functions by monitoring input lag to registered functions. To do so, it periodically runs
 // some scaling logic and keeps track of (un-)registered functions, topics and deployments.
@@ -61,6 +63,7 @@ type ctrl struct {
 	lagTracker LagTracker
 
 	scalerInterval time.Duration
+	scalingPolicy  ScalingPolicy
 }
 
 type fnKey struct {
@@ -140,15 +143,15 @@ func (c *ctrl) onFunctionDeleted(function *v1.Function) {
 }
 
 func (c *ctrl) onDeploymentAddedOrUpdated(deployment *v1beta1.Deployment) {
-	log.Printf("Deployment added/updated: %v", deployment.Name)
 	if key := functionKey(deployment); key != nil {
+		log.Printf("Deployment added/updated: %v", deployment.Name)
 		c.actualReplicas[*key] = int(deployment.Status.Replicas)
 	}
 }
 
 func (c *ctrl) onDeploymentDeleted(deployment *v1beta1.Deployment) {
-	log.Printf("Deployment deleted: %v", deployment.Name)
 	if key := functionKey(deployment); key != nil {
+		log.Printf("Deployment deleted: %v", deployment.Name)
 		delete(c.actualReplicas, *key)
 	}
 }
@@ -171,12 +174,12 @@ func tkey(topic *v1.Topic) topicKey {
 
 func (c *ctrl) scale() {
 	offsets := c.lagTracker.Compute()
-	lags := computeDesiredReplicas(offsets)
+	replicas := c.scalingPolicy(offsets)
 
-	log.Printf("Offsets = %v, Lags = %v", offsets, lags)
+	log.Printf("Offsets = %v, =>Replicas = %v", offsets, replicas)
 
 	for k, fn := range c.functions {
-		desired := lags[key(fn)]
+		desired := replicas[key(fn)]
 
 		log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
 
@@ -190,12 +193,20 @@ func (c *ctrl) scale() {
 	}
 }
 
+func compose(pre func(map[Subscription]PartitionedOffsets) map[Subscription]PartitionedOffsets, policy ScalingPolicy) ScalingPolicy {
+	return func(m map[Subscription]PartitionedOffsets) map[fnKey]int {
+		return policy(pre(m))
+	}
+}
+
 // NewController initialises a new function controller, adding event handlers to the provided informers.
 func New(topicInformer informersV1.TopicInformer,
 	functionInformer informersV1.FunctionInformer,
 	deploymentInformer informersV1Beta1.DeploymentInformer,
 	deployer Deployer,
 	tracker LagTracker) Controller {
+
+	d := NewDelayer()
 
 	pctrl := &ctrl{
 		topicsAddedOrUpdated:      make(chan *v1.Topic, 100),
@@ -213,6 +224,7 @@ func New(topicInformer informersV1.TopicInformer,
 		deployer:                  deployer,
 		lagTracker:                tracker,
 		scalerInterval:            DefaultScalerInterval,
+		scalingPolicy:             compose(d.delay, computeDesiredReplicas),
 	}
 	topicInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
