@@ -31,7 +31,7 @@ import (
 type ScalingPolicy func(offsets map[Subscription]PartitionedOffsets) map[fnKey]int
 
 // DefaultScalerInterval controls how often to run the scaling strategy.
-const DefaultScalerInterval = 5000 * time.Millisecond
+const DefaultScalerInterval = 100 * time.Millisecond
 
 // Controller deploys functions by monitoring input lag to registered functions. To do so, it periodically runs
 // some scaling logic and keeps track of (un-)registered functions, topics and deployments.

@@ -62,7 +62,11 @@ func (o Offsets) Lag() int64 {
 
 // Activity returns how many messages have been handled since a previous query of the tracker.
 func (o Offsets) Activity() int64 {
-	return o.Current - o.PreviousCurrent
+	if o.PreviousCurrent != -1 {
+		return o.Current - o.PreviousCurrent
+	} else {
+		return 0
+	}
 }
 
 type tracker struct {
@@ -72,6 +76,14 @@ type tracker struct {
 
 func (t *tracker) BeginTracking(s Subscription) error {
 	t.subscriptions[s] = make(PartitionedOffsets)
+	parts, err := t.client.Partitions(s.Topic)
+	if err != nil {
+		return err
+	}
+
+	for _, part := range parts {
+		t.subscriptions[s][part] = Offsets{End: -1, Current: -1, PreviousCurrent: -1}
+	}
 	return nil
 }
 
@@ -134,7 +146,11 @@ func NewLagTracker(brokers []string) LagTracker {
 }
 
 func (o Offsets) String() string {
-	return fmt.Sprintf("Offsets[lag=%v (=%v-%v), Activity:%v (=%v-%v)]", o.Lag(), o.End, o.Current, o.Activity(), o.Current, o.PreviousCurrent)
+	if o.PreviousCurrent != -1 {
+		return fmt.Sprintf("Offsets[lag=%v (=%v-%v), Activity:%v (=%v-%v)]", o.Lag(), o.End, o.Current, o.Activity(), o.Current, o.PreviousCurrent)
+	} else {
+		return fmt.Sprintf("Offsets[lag=%v (=%v-%v), Activity:%v (unknown)]", o.Lag(), o.End, o.Current, o.Activity())
+	}
 }
 
 func (po PartitionedOffsets) String() string {
