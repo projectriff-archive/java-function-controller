@@ -1,12 +1,12 @@
 package objx
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestSimpleExample(t *testing.T) {
+
 	// build a map from a JSON object
 	o := MustFromJSON(`{"name":"Mat","foods":["indian","chinese"], "location":{"county":"hobbiton","city":"the shire"}}`)
 
@@ -37,4 +37,5 @@ func TestSimpleExample(t *testing.T) {
 
 	// Get a value by using dot notation
 	assert.Equal(t, "hobbiton", o.Get("location.county").Str())
+
 }
