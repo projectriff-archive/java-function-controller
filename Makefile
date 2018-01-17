@@ -1,4 +1,4 @@
-.PHONY: build build-for-docker clean dockerize gen-mocks
+.PHONY: build build-for-docker clean dockerize gen-mocks test
 OUTPUT = function-controller
 OUTPUT_LINUX = $(OUTPUT)-linux
 BUILD_FLAGS =
@@ -20,8 +20,8 @@ build: $(OUTPUT)
 
 build-for-docker: $(OUTPUT_LINUX)
 
-test: build
-	go test -v ./...
+test:
+	go test -v `glide nv`
 
 $(OUTPUT): $(GO_SOURCES) vendor
 	go build cmd/function-controller.go
@@ -31,6 +31,9 @@ $(OUTPUT_LINUX): $(GO_SOURCES) vendor
 	# and linking everything statically, to minimize Docker image size
 	# See e.g. https://blog.codeship.com/building-minimal-docker-containers-for-go-applications/ for details
 	CGO_ENABLED=0 GOOS=linux go build $(BUILD_FLAGS) -v -a -installsuffix cgo -o $(OUTPUT_LINUX) cmd/function-controller.go
+
+vendor: glide.lock
+	glide install -v
 
 glide.lock: glide.yaml
 	glide up -v
