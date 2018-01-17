@@ -1,5 +1,5 @@
-hash: 41a2e09eee2ad4b647f67cefea3a8a8936fb728e88f2e5d0ba62e75f7f807261
-updated: 2018-01-10T16:59:11.470284+01:00
+hash: d6591c4679854b368c6905643a72dc3a2df78b5a0f22524f73b8ee714a8b0a65
+updated: 2018-01-17T13:15:05.960524+01:00
 imports:
 - name: github.com/bsm/sarama-cluster
   version: 24016d206c730276dfb58f802999066f2f4bfeaa
@@ -117,9 +117,9 @@ imports:
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/stretchr/objx
-  version: bc43df392909781b3b7b1912fcf414b6e088936e
+  version: cbeaeb16a013161a98496fad62933b1d21786672
 - name: github.com/stretchr/testify
-  version: f6abca593680b2315d2075e0f5e2a9751e3f431a
+  version: b91bfb9ebec76498946beb6af7c0230c7cc7ba6c
   subpackages:
   - assert
   - mock

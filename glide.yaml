@@ -1,8 +1,8 @@
 package: github.com/projectriff/function-controller
 import:
 - package: github.com/projectriff/kubernetes-crds
-  repo: git@github.com:ericbottard/kubernetes-crds
   version: vendor-22122017
+  repo: git@github.com:ericbottard/kubernetes-crds
   subpackages:
   - pkg/apis/projectriff.io/v1
   - pkg/client/clientset/versioned
@@ -22,3 +22,5 @@ import:
   - rest
   - tools/cache
   - tools/clientcmd
+- package: github.com/stretchr/testify
+  version: v1.2.0
