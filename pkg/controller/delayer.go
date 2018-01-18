@@ -22,35 +22,49 @@ import (
 )
 
 type delayer struct {
-	idleTimeout map[string]time.Duration
-	memory      map[Subscription]timestampedPartionedOffsets
+	*ctrl
+	scaleDownToZeroDecision   map[fnKey]time.Time
+	previousCombinedPositions activityCounts
 }
 
-type timestampedPartionedOffsets struct {
-	PartitionedOffsets
-	timestamp time.Time
-}
-
-func (d *delayer) delay(offsets map[Subscription]PartitionedOffsets) map[Subscription]PartitionedOffsets {
+// delay transforms passed in replica counts to add some delay (this is achieved by returning the current number of
+// replicas rather than the 'in' value) in the following case:
+// - when scaling to 0, let some idleTimeout pass. The clock is reset if there is activity
+// - when scaling UP, don't scale up further until at least some activity has been recorded
+func (c *delayer) delay(in replicaCounts, combinedPositions activityCounts) (replicaCounts, activityCounts) {
+	result := make(map[fnKey]int, len(in))
 	now := time.Now()
-	result := make(map[Subscription]PartitionedOffsets, len(offsets))
-	for s, o := range offsets {
-		result[s] = make(PartitionedOffsets, len(o))
-		for part, offset := range o {
-			if offset.Lag() == 0 && offset.Activity() == 0 {
-				if now.Before(d.memory[s].timestamp.Add( /*d.idleTimeout[s.Group]*/ 15 * time.Second)) {
-					result[s][part] = d.memory[s].PartitionedOffsets[part]
-					continue
+	for fn, target := range in {
+		result[fn] = in[fn]
+		if target == 0 && c.actualReplicas[fn] > 0 {
+			if start, ok := c.scaleDownToZeroDecision[fn]; ok {
+				idleTimeout := 10 * time.Second
+				//idleTimeout := time.Duration(*c.functions[fn].Spec.IdleTimeoutMs) * time.Millisecond
+				if now.Before(start.Add(idleTimeout)) { // Timeout not elapsed, don't proceed with scale down
+					result[fn] = c.actualReplicas[fn]
+					log.Printf("Still waiting %v for %v", start.Add(idleTimeout).Sub(now), fn.name)
+					if combinedPositions[fn] > c.previousCombinedPositions[fn] { // Still some activity, reset the clock
+						log.Printf("Resetting the clock for %v", fn.name)
+						delete(c.scaleDownToZeroDecision, fn)
+					}
+				} else {
+					delete(c.scaleDownToZeroDecision, fn)
 				}
+			} else {
+				c.scaleDownToZeroDecision[fn] = now
+				result[fn] = c.actualReplicas[fn]
 			}
-			d.memory[s] = timestampedPartionedOffsets{PartitionedOffsets: o, timestamp: now}
-			result[s][part] = offsets[s][part]
+		} else if target > c.actualReplicas[fn] && c.actualReplicas[fn] > 0 { // Scaling UP
+			delete(c.scaleDownToZeroDecision, fn)
+			if pcc, ok := c.previousCombinedPositions[fn]; ok && pcc == combinedPositions[fn] {
+				// No activity since last tick. Must be rebalancing. Wait before scaling even more
+				result[fn] = c.actualReplicas[fn]
+			}
+
+		} else if target < c.actualReplicas[fn] { // Scaling DOWN in the 1-N range
+			delete(c.scaleDownToZeroDecision, fn)
 		}
 	}
-	log.Printf("Cache: %v", d.memory)
-	return result
-}
-
-func NewDelayer() delayer {
-	return delayer{memory: make(map[Subscription]timestampedPartionedOffsets)}
+	c.previousCombinedPositions = combinedPositions
+	return result, combinedPositions
 }

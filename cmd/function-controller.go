@@ -54,6 +54,8 @@ func main() {
 	}
 	ctrl := controller.New(topicsInformer, functionsInformer, deploymentInformer, deployer, controller.NewLagTracker(brokers))
 
+	controller.DecorateWithDelayAndSmoothing(ctrl)
+
 	stopCh := make(chan struct{})
 	go ctrl.Run(stopCh)
 

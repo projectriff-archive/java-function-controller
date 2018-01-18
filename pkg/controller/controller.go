@@ -28,8 +28,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type ScalingPolicy func(offsets map[Subscription]PartitionedOffsets) map[fnKey]int
-
 // DefaultScalerInterval controls how often to run the scaling strategy.
 const DefaultScalerInterval = 100 * time.Millisecond
 
@@ -42,6 +40,20 @@ type Controller interface {
 	// Should not be called once running.
 	SetScalingInterval(interval time.Duration)
 }
+
+// type replicaCounts is a mapping from function to wanted number of replicas
+type replicaCounts map[fnKey]int
+
+// type activityCounts is a mapping from function to combined activity marker (we're using sum of position accross all
+// partitions and all topics
+type activityCounts map[fnKey]int64
+
+// a scalingPolicy turns offsets into replicaCounts. activityCounts are computed as a byproduct
+type scalingPolicy func(offsets map[Subscription]PartitionedOffsets) (replicaCounts, activityCounts)
+
+// a scalingPostProcessor applies transformation on the computed number of replicas, possibly using activityCounts,
+// which is expected to be passed along without change
+type scalingPostProcessor func(replicaCounts, activityCounts) (replicaCounts, activityCounts)
 
 type ctrl struct {
 	topicsAddedOrUpdated      chan *v1.Topic
@@ -63,7 +75,7 @@ type ctrl struct {
 	lagTracker LagTracker
 
 	scalerInterval time.Duration
-	scalingPolicy  ScalingPolicy
+	scalingPolicy  scalingPolicy
 }
 
 type fnKey struct {
@@ -110,6 +122,10 @@ func (c *ctrl) Run(stopCh <-chan struct{}) {
 
 func (c *ctrl) SetScalingInterval(interval time.Duration) {
 	c.scalerInterval = interval
+}
+
+func (c *ctrl) SetScalingPolicy(policy scalingPolicy) {
+	c.scalingPolicy = policy
 }
 
 func (c *ctrl) onTopicAddedOrUpdated(topic *v1.Topic) {
@@ -174,14 +190,14 @@ func tkey(topic *v1.Topic) topicKey {
 
 func (c *ctrl) scale() {
 	offsets := c.lagTracker.Compute()
-	replicas := c.scalingPolicy(offsets)
+	replicas, _ := c.scalingPolicy(offsets)
 
-	log.Printf("Offsets = %v, =>Replicas = %v", offsets, replicas)
+	//log.Printf("Offsets = %v, =>Replicas = %v", offsets, replicas)
 
 	for k, fn := range c.functions {
 		desired := replicas[key(fn)]
 
-		log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
+		//log.Printf("For %v, want %v currently have %v", fn.Name, desired, c.actualReplicas[k])
 
 		if desired != c.actualReplicas[k] {
 			err := c.deployer.Scale(fn, desired)
@@ -193,20 +209,19 @@ func (c *ctrl) scale() {
 	}
 }
 
-func compose(pre func(map[Subscription]PartitionedOffsets) map[Subscription]PartitionedOffsets, policy ScalingPolicy) ScalingPolicy {
-	return func(m map[Subscription]PartitionedOffsets) map[fnKey]int {
-		return policy(pre(m))
+// compose returns a function that applies 'post' after 'policy'
+func compose(post scalingPostProcessor, policy scalingPolicy) scalingPolicy {
+	return func(m map[Subscription]PartitionedOffsets) (replicaCounts, activityCounts) {
+		return post(policy(m))
 	}
 }
 
-// NewController initialises a new function controller, adding event handlers to the provided informers.
+// New initialises a new function controller, adding event handlers to the provided informers.
 func New(topicInformer informersV1.TopicInformer,
 	functionInformer informersV1.FunctionInformer,
 	deploymentInformer informersV1Beta1.DeploymentInformer,
 	deployer Deployer,
 	tracker LagTracker) Controller {
-
-	d := NewDelayer()
 
 	pctrl := &ctrl{
 		topicsAddedOrUpdated:      make(chan *v1.Topic, 100),
@@ -224,7 +239,7 @@ func New(topicInformer informersV1.TopicInformer,
 		deployer:                  deployer,
 		lagTracker:                tracker,
 		scalerInterval:            DefaultScalerInterval,
-		scalingPolicy:             compose(d.delay, computeDesiredReplicas),
+		scalingPolicy:             computeDesiredReplicas,
 	}
 	topicInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -256,16 +271,35 @@ func New(topicInformer informersV1.TopicInformer,
 	return pctrl
 }
 
+func DecorateWithDelayAndSmoothing(c Controller) {
+	pctrl := c.(*ctrl)
+	smoother := smoother{ctrl: pctrl, memory: make(map[fnKey]float32)}
+	pctrl.scalingPolicy = compose(smoother.smooth, pctrl.scalingPolicy)
+
+	delayer := delayer{ctrl: pctrl, scaleDownToZeroDecision: make(map[fnKey]time.Time), previousCombinedPositions: make(map[fnKey]int64)}
+	pctrl.scalingPolicy = compose(delayer.delay, pctrl.scalingPolicy)
+}
+
 // computeDesiredReplicas turns a subscription based map (of offsets) into a function-key based map of how many replicas to spawn.
 // The logic is as follows: for a given topic, look at how many partitions have lag or activity (there is no point in spawning 2
 // replicas if only a single partition has lag, even if it's a 1000 messages lag).
 // If the function has multiple inputs, we take the max of those computations (some topics may be starved but that's ok
 // while we still maximize the throughput for the given topic that has the most needy partitions)
-func computeDesiredReplicas(offsets map[Subscription]PartitionedOffsets) map[fnKey]int {
-	result := make(map[fnKey]int)
+func computeDesiredReplicas(offsets map[Subscription]PartitionedOffsets) (replicaCounts, activityCounts) {
+	replicas := make(replicaCounts)
+	combinedCurrentPositions := make(activityCounts)
 	for s, o := range offsets {
 		k := fnKey{s.Group}
-		result[k] = max(result[k], numberOfPartitionsWithLagOrActivity(o))
+		replicas[k] = max(replicas[k], numberOfPartitionsWithLagOrActivity(o))
+		combinedCurrentPositions[k] = combinedCurrentPositions[k] + sumCurrentPositions(o)
+	}
+	return replicas, combinedCurrentPositions
+}
+
+func sumCurrentPositions(offsets PartitionedOffsets) int64 {
+	result := int64(0)
+	for _, o := range offsets {
+		result += o.Current
 	}
 	return result
 }
