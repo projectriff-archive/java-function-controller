@@ -33,10 +33,10 @@ $(OUTPUT_LINUX): $(GO_SOURCES) vendor
 	CGO_ENABLED=0 GOOS=linux go build $(BUILD_FLAGS) -v -a -installsuffix cgo -o $(OUTPUT_LINUX) cmd/function-controller.go
 
 vendor: glide.lock
-	glide install -v
+	glide install -v --force
 
 glide.lock: glide.yaml
-	glide up -v
+	glide up -v --force
 
 gen-mocks:
 	mockery -name 'TopicInformer|FunctionInformer' -dir vendor/github.com/projectriff/kubernetes-crds/pkg/client/informers/externalversions/projectriff/v1

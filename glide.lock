@@ -1,5 +1,5 @@
 hash: d6591c4679854b368c6905643a72dc3a2df78b5a0f22524f73b8ee714a8b0a65
-updated: 2018-01-17T13:15:05.960524+01:00
+updated: 2018-01-18T18:42:09.969993+01:00
 imports:
 - name: github.com/bsm/sarama-cluster
   version: 24016d206c730276dfb58f802999066f2f4bfeaa
@@ -93,7 +93,7 @@ imports:
   subpackages:
   - difflib
 - name: github.com/projectriff/kubernetes-crds
-  version: 7a9b23a4bb1d3087d3b8ff7cb430d27a6b569edc
+  version: a8982a675f1c2df721129d787b83fde4423ec3d8
   repo: git@github.com:ericbottard/kubernetes-crds
   subpackages:
   - pkg/apis/projectriff.io
@@ -162,7 +162,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: k8s.io/api
-  version: 389dfa299845bcf399c16af89987e8775718ea48
+  version: 6c6dac0277229b9e9578c5ca3f74a4345d35cdc2
   subpackages:
   - admissionregistration/v1alpha1
   - apps/v1beta1
@@ -189,7 +189,7 @@ imports:
   - storage/v1
   - storage/v1beta1
 - name: k8s.io/apimachinery
-  version: bc110fd540ab678abbf2bc71d9ce908eb9325ef6
+  version: 019ae5ada31de202164b118aee88ee2d14075c31
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -232,7 +232,7 @@ imports:
   - pkg/watch
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
-  version: 3a46b5de730a74e064197a157c96c2d29724a677
+  version: 2ae454230481a7cb5544325e12ad7658ecccd19b
   subpackages:
   - discovery
   - informers

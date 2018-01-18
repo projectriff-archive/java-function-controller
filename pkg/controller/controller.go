@@ -259,9 +259,21 @@ func New(topicInformer informersV1.TopicInformer,
 		},
 	})
 	functionInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { pctrl.functionsAddedOrUpdated <- obj.(*v1.Function) },
-		UpdateFunc: func(old interface{}, new interface{}) { pctrl.functionsAddedOrUpdated <- new.(*v1.Function) },
-		DeleteFunc: func(obj interface{}) { pctrl.functionsDeleted <- obj.(*v1.Function) },
+		AddFunc: func(obj interface{}) {
+			fn := obj.(*v1.Function)
+			v1.SetObjectDefaults_Function(fn)
+			pctrl.functionsAddedOrUpdated <- fn
+		},
+		UpdateFunc: func(old interface{}, new interface{}) {
+			fn := new.(*v1.Function)
+			v1.SetObjectDefaults_Function(fn)
+			pctrl.functionsAddedOrUpdated <- fn
+		},
+		DeleteFunc: func(obj interface{}) {
+			fn := obj.(*v1.Function)
+			v1.SetObjectDefaults_Function(fn)
+			pctrl.functionsDeleted <- fn
+		},
 	})
 	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) { pctrl.deploymentsAddedOrUpdated <- obj.(*v1beta1.Deployment) },

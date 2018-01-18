@@ -38,8 +38,8 @@ func (c *delayer) delay(in replicaCounts, combinedPositions activityCounts) (rep
 		result[fn] = in[fn]
 		if target == 0 && c.actualReplicas[fn] > 0 {
 			if start, ok := c.scaleDownToZeroDecision[fn]; ok {
-				idleTimeout := 10 * time.Second
-				//idleTimeout := time.Duration(*c.functions[fn].Spec.IdleTimeoutMs) * time.Millisecond
+				//idleTimeout := 10 * time.Second
+				idleTimeout := time.Duration(*c.functions[fn].Spec.IdleTimeoutMs) * time.Millisecond
 				if now.Before(start.Add(idleTimeout)) { // Timeout not elapsed, don't proceed with scale down
 					result[fn] = c.actualReplicas[fn]
 					log.Printf("Still waiting %v for %v", start.Add(idleTimeout).Sub(now), fn.name)
