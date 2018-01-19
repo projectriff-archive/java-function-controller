@@ -46,7 +46,10 @@ type replicaCounts map[fnKey]int
 
 // type activityCounts is a mapping from function to combined activity marker (we're using sum of position accross all
 // partitions and all topics
-type activityCounts map[fnKey]int64
+type activityCounts map[fnKey]struct {
+	current int64
+	end     int64
+}
 
 // a scalingPolicy turns offsets into replicaCounts. activityCounts are computed as a byproduct
 type scalingPolicy func(offsets map[Subscription]PartitionedOffsets) (replicaCounts, activityCounts)
@@ -239,8 +242,9 @@ func New(topicInformer informersV1.TopicInformer,
 		deployer:                  deployer,
 		lagTracker:                tracker,
 		scalerInterval:            DefaultScalerInterval,
-		scalingPolicy:             computeDesiredReplicas,
 	}
+	pctrl.scalingPolicy = pctrl.computeDesiredReplicas
+
 	topicInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			topic := obj.(*v1.Topic)
@@ -288,7 +292,7 @@ func DecorateWithDelayAndSmoothing(c Controller) {
 	smoother := smoother{ctrl: pctrl, memory: make(map[fnKey]float32)}
 	pctrl.scalingPolicy = compose(smoother.smooth, pctrl.scalingPolicy)
 
-	delayer := delayer{ctrl: pctrl, scaleDownToZeroDecision: make(map[fnKey]time.Time), previousCombinedPositions: make(map[fnKey]int64)}
+	delayer := delayer{ctrl: pctrl, scaleDownToZeroDecision: make(map[fnKey]time.Time), previousCombinedPositions: make(activityCounts)}
 	pctrl.scalingPolicy = compose(delayer.delay, pctrl.scalingPolicy)
 }
 
@@ -297,15 +301,27 @@ func DecorateWithDelayAndSmoothing(c Controller) {
 // replicas if only a single partition has lag, even if it's a 1000 messages lag).
 // If the function has multiple inputs, we take the max of those computations (some topics may be starved but that's ok
 // while we still maximize the throughput for the given topic that has the most needy partitions)
-func computeDesiredReplicas(offsets map[Subscription]PartitionedOffsets) (replicaCounts, activityCounts) {
+func (c *ctrl) computeDesiredReplicas(offsets map[Subscription]PartitionedOffsets) (replicaCounts, activityCounts) {
 	replicas := make(replicaCounts)
 	combinedCurrentPositions := make(activityCounts)
 	for s, o := range offsets {
-		k := fnKey{s.Group}
-		replicas[k] = max(replicas[k], numberOfPartitionsWithLagOrActivity(o))
-		combinedCurrentPositions[k] = combinedCurrentPositions[k] + sumCurrentPositions(o)
+		fn := fnKey{s.Group}
+		topic := topicKey{s.Topic}
+		replicas[fn] = max(replicas[fn], c.desiredReplicasForTopic(o, fn, topic))
+		ccp := combinedCurrentPositions[fn]
+		ccp.end += sumEndPositions(o)
+		ccp.current += sumCurrentPositions(o)
+		combinedCurrentPositions[fn] = ccp
 	}
 	return replicas, combinedCurrentPositions
+}
+
+func sumEndPositions(offsets PartitionedOffsets) int64 {
+	result := int64(0)
+	for _, o := range offsets {
+		result += o.End
+	}
+	return result
 }
 
 func sumCurrentPositions(offsets PartitionedOffsets) int64 {
@@ -316,17 +332,60 @@ func sumCurrentPositions(offsets PartitionedOffsets) int64 {
 	return result
 }
 
-func numberOfPartitionsWithLagOrActivity(offsets PartitionedOffsets) int {
-	result := 0
+func (c *ctrl) desiredReplicasForTopic(offsets PartitionedOffsets, fnKey fnKey, tKey topicKey) int {
+	maxPartLag := int64(0)
 	for _, o := range offsets {
-		if o.Lag() > 0 || o.Activity() > 0 {
-			result++
+		maxPartLag = max64(maxPartLag, o.Lag())
+	}
+
+	// TODO: those 3 numbers part of Function spec?
+	lagRequiredForMax := float32(10)
+	lagRequiredForOne := float32(1)
+	minReplicas := int32(0)
+
+	partitionCount := int32(1)
+	if topic, ok := c.topics[tKey]; ok {
+		partitionCount = *topic.Spec.Partitions
+	}
+	maxReplicas := partitionCount
+	if fn, ok := c.functions[fnKey]; ok {
+		if fn.Spec.MaxReplicas != nil {
+			maxReplicas = *fn.Spec.MaxReplicas
 		}
 	}
-	return result
+	maxReplicas = clamp(maxReplicas, minReplicas, partitionCount)
+
+	slope := (float32(maxReplicas) - 1.0) / (lagRequiredForMax - lagRequiredForOne)
+	var computedReplicas int32
+	if slope > 0.0 {
+		// max>1
+		computedReplicas = (int32)(1 + (float32(maxPartLag)-lagRequiredForOne)*slope)
+	} else if maxPartLag > int64(lagRequiredForOne) {
+		computedReplicas = 1
+	} else {
+		computedReplicas = 0
+	}
+	return int(clamp(computedReplicas, minReplicas, maxReplicas))
+}
+
+func clamp(value int32, min int32, max int32) int32 {
+	if value < min {
+		value = min
+	} else if value > max {
+		value = max
+	}
+	return value
 }
 
 func max(a int, b int) int {
+	if a > b {
+		return a
+	} else {
+		return b
+	}
+}
+
+func max64(a int64, b int64) int64 {
 	if a > b {
 		return a
 	} else {

@@ -43,8 +43,8 @@ func (c *delayer) delay(in replicaCounts, combinedPositions activityCounts) (rep
 				if now.Before(start.Add(idleTimeout)) { // Timeout not elapsed, don't proceed with scale down
 					result[fn] = c.actualReplicas[fn]
 					log.Printf("Still waiting %v for %v", start.Add(idleTimeout).Sub(now), fn.name)
-					if combinedPositions[fn] > c.previousCombinedPositions[fn] { // Still some activity, reset the clock
-						log.Printf("Resetting the clock for %v", fn.name)
+					if combinedPositions[fn].end > c.previousCombinedPositions[fn].end { // Still some activity, reset the clock
+						log.Printf("Resetting the clock for %v: %v, %v", fn.name, combinedPositions[fn], c.previousCombinedPositions[fn])
 						delete(c.scaleDownToZeroDecision, fn)
 					}
 				} else {
