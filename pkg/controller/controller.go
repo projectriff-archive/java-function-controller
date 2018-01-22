@@ -360,7 +360,7 @@ func (c *ctrl) desiredReplicasForTopic(offsets PartitionedOffsets, fnKey fnKey, 
 	if slope > 0.0 {
 		// max>1
 		computedReplicas = (int32)(1 + (float32(maxPartLag)-lagRequiredForOne)*slope)
-	} else if maxPartLag > int64(lagRequiredForOne) {
+	} else if maxPartLag >= int64(lagRequiredForOne) {
 		computedReplicas = 1
 	} else {
 		computedReplicas = 0

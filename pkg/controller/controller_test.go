@@ -125,8 +125,8 @@ func (suite *ControllerTestSuite) TestFunctionWithNonTrivialInputTopic() {
 	suite.deployer.On("Deploy", fn).Return(nil)
 
 	suite.tracker.On("Compute").Return(lag(fn, 1, 0, 0)).Once()
-	suite.tracker.On("Compute").Return(lag(fn, 2, 0, 5)).Once()
-	suite.tracker.On("Compute").Return(lag(fn, 3, 1, 2)).Once()
+	suite.tracker.On("Compute").Return(lag(fn, 6, 0, 1)).Once()
+	suite.tracker.On("Compute").Return(lag(fn, 2, 3, 10)).Once()
 	suite.deployer.On("Scale", fn, 1).Return(nil)
 	suite.deployer.On("Scale", fn, 2).Return(nil)
 	suite.deployer.On("Scale", fn, 3).Return(nil).Run(func(args mock.Arguments) {
@@ -152,10 +152,10 @@ func (suite *ControllerTestSuite) TestReplicasReconciliation() {
 	topic := &v1.Topic{ObjectMeta: metav1.ObjectMeta{Name: "input"}, Spec: v1.TopicSpec{Partitions: &three}}
 	suite.deployer.On("Deploy", fn).Return(nil)
 
-	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Run(func(args mock.Arguments) {
+	suite.tracker.On("Compute").Return(lag(fn, 2, 6, 0)).Run(func(args mock.Arguments) {
 		computes++
 	}).Times(5)
-	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Once().Run(func(args mock.Arguments) {
+	suite.tracker.On("Compute").Return(lag(fn, 2, 6, 0)).Once().Run(func(args mock.Arguments) {
 		computes++
 		// Disrupt actual replicas on 6th computation
 		deployment := v1beta1.Deployment{
@@ -167,7 +167,7 @@ func (suite *ControllerTestSuite) TestReplicasReconciliation() {
 		}
 		suite.deploymentsHandlers.UpdateFunc(&deployment, &deployment)
 	})
-	suite.tracker.On("Compute").Return(lag(fn, 2, 1, 0)).Run(func(args mock.Arguments) {
+	suite.tracker.On("Compute").Return(lag(fn, 2, 6, 0)).Run(func(args mock.Arguments) {
 		computes++
 	}).Once()
 	suite.deployer.On("Scale", fn, 2).Return(nil).Once()
