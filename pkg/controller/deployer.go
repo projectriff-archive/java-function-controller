@@ -26,7 +26,6 @@ import (
 	"github.com/projectriff/kubernetes-crds/pkg/apis/projectriff.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -42,7 +41,7 @@ var (
 
 // Deployer allows the realisation of a function on k8s and its subsequent scaling to accommodate more/less load.
 type Deployer interface {
-	// Deploy requests that a function be initially deployed on k8s. If a deployment already exists, it is updated.
+	// Deploy requests that a function be initially deployed on k8s.
 	Deploy(function *v1.Function) error
 
 	// Undeploy is called when a function is unregistered.
@@ -59,14 +58,7 @@ type deployer struct {
 
 func (d *deployer) Deploy(function *v1.Function) error {
 
-	update := true
-	deployment, err := d.clientset.ExtensionsV1beta1().Deployments(function.Namespace).Get(function.Name, metav1.GetOptions{})
-	if err != nil && errors.IsNotFound(err) {
-		update = false
-		err = nil
-	}
-
-	deployment = &v1beta1.Deployment{
+	deployment := v1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: function.Name, Namespace: function.Namespace},
 		Spec: v1beta1.DeploymentSpec{
 			Replicas: &zero,
@@ -76,11 +68,7 @@ func (d *deployer) Deploy(function *v1.Function) error {
 			},
 		},
 	}
-	if update {
-		_, err = d.clientset.ExtensionsV1beta1().Deployments(function.Namespace).Update(deployment)
-	} else {
-		_, err = d.clientset.ExtensionsV1beta1().Deployments(function.Namespace).Create(deployment)
-	}
+	_, err := d.clientset.ExtensionsV1beta1().Deployments(function.Namespace).Create(&deployment)
 	if err != nil {
 		return err
 	}
