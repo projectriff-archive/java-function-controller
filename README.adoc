@@ -1,5 +1,8 @@
 = Function Controller
 
+*THIS REPOSITORY IS NO LONGER MAINTAINED. IT HAS BEEN REPLACED BY:*
+https://github.com/projectriff/function-controller
+
 Build:
 
 ----
