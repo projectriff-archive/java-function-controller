@@ -1,8 +1,4 @@
-.classpath
-.project
-.settings/
-.springBeans
-target
-
 .idea
-*.iml
+function-controller
+.DS_Store
+function-controller-linux
